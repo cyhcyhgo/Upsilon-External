@@ -6,6 +6,25 @@
 #include "inc/peripherals.h"
 #include "inc/selector.h"
 
+#define LCD_REG (*((volatile unsigned short *) 0x60000000))
+#define LCD_DATA (*((volatile unsigned short *) (0x60000000 | (1<<(16+1))) ))
+
+static inline void send_command(uint8_t c) {
+    LCD_REG = c;
+}
+static inline uint16_t receive_data() {
+    return LCD_DATA;
+}
+
+void read_id(uint8_t id[3]) {
+    send_command(0x04);
+    receive_data(); // Dummy read, per datasheet
+    id[0] = receive_data();
+    id[1] = receive_data();
+    id[2] = receive_data();
+}
+
+
 void extapp_main(void) {
 
     // Wait for the key to be released before starting the application
@@ -13,6 +32,11 @@ void extapp_main(void) {
     // Draw a white background
     init_display();
     // Draw hello world message
+
+    uint8_t id[3];
+    char msg[30];
+    read_id(id);
+    sprintf(msg, "id=0x%02X%02X%02X\r\n", id[0], id[1], id[2]);
 
     // Max RAW :
  // extapp_drawTextLarge("This is going to be a unit circl", 0, 20 * 4, 0x0000, 0xFFFF, false);
@@ -35,6 +59,7 @@ void extapp_main(void) {
     extapp_drawTextLarge("     5π/4  π+x  |  -x   7π/4    ", 0, 20 * 9, 0x0000, 0xFFFF, false);
     extapp_drawTextLarge("        4π/3    |    5π/3       ", 0, 20 * 10, 0x0000, 0xFFFF, false);
     extapp_drawTextLarge("              3π/2              ", 0, 20 * 11, 0x0000, 0xFFFF, false);
+    extapp_drawTextLarge(msg, 0, 20 * 12, 0x0000, 0xFFFF, false);
 
     // Just wait for a key to be pressed (defined in peripherals.c)
     waitForKeyPressed();
