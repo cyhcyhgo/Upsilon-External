@@ -1,5 +1,5 @@
 name: Continuous integration
-#on: [pull_request, push]
+#on: [pull_request, push]1
 on:
   push:
   pull_request:
