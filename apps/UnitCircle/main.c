@@ -58,8 +58,8 @@ void extapp_main(void) {
     extapp_drawTextLarge("   7π/6         |        11π/6  ", 0, 20 * 8, 0x0000, 0xFFFF, false);
     extapp_drawTextLarge("     5π/4  π+x  |  -x   7π/4    ", 0, 20 * 9, 0x0000, 0xFFFF, false);
     extapp_drawTextLarge("        4π/3    |    5π/3       ", 0, 20 * 10, 0x0000, 0xFFFF, false);
-    extapp_drawTextLarge("              3π/2              ", 0, 20 * 11, 0x0000, 0xFFFF, false);
-    extapp_drawTextLarge(msg, 0, 20 * 12, 0x0000, 0xFFFF, false);
+    //extapp_drawTextLarge("              3π/2              ", 0, 20 * 11, 0x0000, 0xFFFF, false);
+    extapp_drawTextLarge(msg, 0, 20 * 11, 0x0000, 0xFFFF, false);
 
     // Just wait for a key to be pressed (defined in peripherals.c)
     waitForKeyPressed();
