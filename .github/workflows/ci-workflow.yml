@@ -160,7 +160,9 @@ jobs:
       - uses: actions/upload-artifact@master
         with:
           name: UnitCircle
-          path: UnitCircle.tar
+          path: |
+            apps/UnitCircle/app.elf
+            UnitCircle.tar
 
 env:
   ACCEPT_OFFICIAL_TOS: 1
