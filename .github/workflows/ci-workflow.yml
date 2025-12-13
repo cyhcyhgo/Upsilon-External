@@ -93,16 +93,28 @@ jobs:
       # 3. 将下载的文件移动到正确的位置 (覆盖旧文件)
       - name: Move artifacts to website folder
         run: |
-          echo "Organizing files..."
-          # 遍历下载下来的每个构建文件夹
-          # 结构大约是: downloaded_builds/build-UnitCircle/apps/UnitCircle/app.elf
+          echo "=== Debug: Check downloaded structure ==="
+          ls -R downloaded_builds/ || echo "downloaded_builds not found"
           
-          # 我们使用 rsync 或 cp 将它们合并到当前目录的 apps/ 文件夹下
-          # -a: archive mode, -v: verbose
-          rsync -av downloaded_builds/*/apps/ apps/
+          echo "=== Start Moving Files ==="
+          mkdir -p apps
           
-          echo "Listing checks:"
-          ls -R apps/UnitCircle/ || echo "UnitCircle not found"
+          # 遍历 downloaded_builds 下的每一个 artifact 文件夹
+          # 结构通常是: downloaded_builds/build-KhiCAS/apps/KhiCAS/...
+          for dir in downloaded_builds/*; do
+            # 检查里面是否有 apps 文件夹
+            if [ -d "$dir/apps" ]; then
+              echo "Merging artifacts from: $dir"
+              # 将该构建下的 apps 目录内容拷贝到主 apps 目录
+              # -r 递归, -f 强制覆盖 (如果有旧文件)
+              cp -rf "$dir/apps/"* apps/
+            else
+              echo "Warning: No apps directory found in $dir"
+            fi
+          done
+          
+          echo "=== Final deployment content check ==="
+          ls -F apps/
 
       # 4. 配置 Pages
       - name: Setup Pages
