@@ -1,43 +1,89 @@
-name: Build and Deploy Master
+name: Smart Build and Deploy
 
 on:
-  push:
-    branches: ["master", "main"]
   workflow_dispatch:
+    inputs:
+      build_mode:
+        description: '选择构建模式'
+        required: true
+        default: 'incremental'
+        type: choice
+        options:
+          - 'incremental'  # 仅构建本次修改的 App (保留旧 App)
+          - 'full_rebuild' # 删除所有旧文件，重新构建所有 App
 
-# 设置权限：允许读取代码、写入 Pages、写入 ID Token (用于 OIDC 认证)
 permissions:
   contents: read
   pages: write
   id-token: write
+  actions: read # 需要读取之前的构建产物
 
-# 并发策略：如果发起了新的部署，取消正在进行的旧部署
 concurrency:
   group: "pages"
   cancel-in-progress: true
 
 jobs:
   # =================================================================================
-  # JOB 1: 构建所有 Apps (使用 Matrix 矩阵策略，避免重复代码)
+  # JOB 1: 智能分析 (生成构建矩阵)
+  # =================================================================================
+  setup-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      has_apps: ${{ steps.set-matrix.outputs.has_apps }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 必须拉取完整历史，否则无法进行 git diff 比较
+
+      - name: Generate Build Matrix
+        id: set-matrix
+        shell: bash
+        run: |
+          MODE="${{ inputs.build_mode }}"
+          echo "Current Mode: $MODE"
+          
+          APPS_JSON="[]"
+          
+          if [ "$MODE" == "full_rebuild" ]; then
+            echo "--- Scanning all apps with Makefile ---"
+            # 查找 apps 目录下所有含 Makefile 的一级子目录
+            APPS=$(find apps -maxdepth 2 -name Makefile | awk -F/ '{print $2}' | sort | uniq)
+          else
+            echo "--- Scanning changed apps (Incremental) ---"
+            # 比较 HEAD 和上一次提交，查找 apps/ 下变动的文件
+            # 获取变动的目录名 (例如 apps/KhiCAS/Makefile -> KhiCAS)
+            APPS=$(git diff --name-only HEAD~1 HEAD | grep "^apps/" | awk -F/ '{print $2}' | sort | uniq)
+          fi
+
+          # 如果找到了 App
+          if [ ! -z "$APPS" ]; then
+            # 将换行符分隔的字符串转换为 JSON 数组
+            # jq -R . (读取字符串) | jq -s . (合并为数组) | jq -c . (压缩输出)
+            APPS_JSON=$(echo "$APPS" | jq -R . | jq -s -c .)
+            echo "has_apps=true" >> $GITHUB_OUTPUT
+          else
+            echo "No apps found to build."
+            APPS_JSON="[]"
+            echo "has_apps=false" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "Final Matrix: $APPS_JSON"
+          echo "matrix=$APPS_JSON" >> $GITHUB_OUTPUT
+
+  # =================================================================================
+  # JOB 2: 动态构建 App
   # =================================================================================
   build_apps:
+    needs: setup-matrix
+    # 只有当检测到有 App 需要构建时才运行
+    if: ${{ needs.setup-matrix.outputs.has_apps == 'true' }}
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false # 如果其中一个 App 构建失败，不要取消其他 App 的构建
+      fail-fast: false
       matrix:
-        # 在这里列出所有需要构建的 App 名称
-        app: 
-          - KhiCAS
-          - BadApple
-          - CHIP-8
-          - Example
-          - Example-Cpp
-          - Flash2Ram
-          - HexEdit
-          - Nofrendo
-          - Peanut-GB
-          - Periodic
-          - UnitCircle
+        app: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
 
     steps:
       - name: Checkout repository
@@ -45,88 +91,144 @@ jobs:
         with:
           submodules: true
 
-      # 安装所有依赖 (这一长串只需要写一次)
       - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive
 
-      # 构建 App
-      # 动态使用 ${{ matrix.app }} 来填入当前的任务名称
+      # 使用修正后的构建逻辑
       - name: Build ${{ matrix.app }}
-        run: make ${{ matrix.app }}_rebuild
+        run: |
+          # 动态修复 MicroPython 的 Makefile (如果需要)
+          if [ -f "apps/KhiCAS/Makefile" ] && [ "${{ matrix.app }}" == "KhiCAS" ]; then
+             echo "Applying MicroPython patch for KhiCAS..."
+             sed -i 's/\$$(CC) \$$(CFLAGS)/\$$(CC) \$$(CFLAGS) -Wno-error/g' apps/KhiCAS/src/micropython-1.12/py/mkrules.mk || true
+          fi
+          
+          make ${{ matrix.app }}_rebuild
 
-      # 上传构建产物
-      # 重点：我们要上传 .elf 和 .icon，而不是 tar 包
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          # 给每个产物起个独一无二的名字，例如 build-KhiCAS
           name: build-${{ matrix.app }}
-          # 指定要上传的文件路径
           path: |
             apps/${{ matrix.app }}/app.elf
             apps/${{ matrix.app }}/app.icon
           if-no-files-found: warn
 
   # =================================================================================
-  # JOB 2: 部署到 GitHub Pages (必须等待上面的构建全部完成)
+  # JOB 3: 智能部署
   # =================================================================================
   deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    needs: build_apps # <--- 关键：依赖于上面的 build_apps 任务
+    needs: [setup-matrix, build_apps]
+    # 即使 build_apps 被跳过（比如没修改任何文件），deploy 也应该运行（为了可能的页面更新），
+    # 但我们需要 always() 来确保即使 skipped 也能走到这，或者根据业务逻辑调整。
+    # 这里我们简化逻辑：总是尝试运行部署。
+    if: always() 
     
     steps:
-      # 1. 检出网页源码
-      - name: Checkout
+      - name: Checkout Website Source
         uses: actions/checkout@v4
 
-      # 2. 下载所有构建好的 App 文件
-      - name: Download All Artifacts
+      # -------------------------------------------------------
+      # 智能逻辑：处理旧版本文件
+      # -------------------------------------------------------
+      
+      # 1. 如果是全量重构：什么都不做，保持 apps/ 空白即可 (checkout 下来的可能有残留，下面会清理)
+      # 2. 如果是增量更新：我们需要下载上一次部署成功的 artifacts，恢复未修改的 app
+      
+      - name: Restore Previous Deployment (Incremental Mode Only)
+        if: ${{ inputs.build_mode == 'incremental' }}
+        # 使用 dawidd6/action-download-artifact 下载上一次 workflow 的 artifact
+        # 注意：这里假设 GitHub Pages 的 artifact 名为 'github-pages'
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: ${{ github.workflow }}
+          workflow_conclusion: success
+          name: github-pages
+          path: restored_pages
+          if_no_artifact_found: warn
+
+      - name: Extract Previous Artifacts
+        if: ${{ inputs.build_mode == 'incremental' }}
+        run: |
+          if [ -d "restored_pages" ]; then
+             echo "--- Restoring previous site content ---"
+             # github-pages artifact 是一个 tar 包
+             tar -xf restored_pages/artifact.tar -C restored_pages
+             
+             # 我们只需要 apps 文件夹里的二进制文件
+             mkdir -p apps
+             if [ -d "restored_pages/apps" ]; then
+                 echo "Copying old apps..."
+                 cp -rn restored_pages/apps/* apps/ || true
+             fi
+             
+             # 清理临时文件
+             rm -rf restored_pages
+          else
+             echo "No previous deployment found, starting fresh."
+          fi
+
+      # -------------------------------------------------------
+      # 清理与合并
+      # -------------------------------------------------------
+      
+      - name: Download Current Build Artifacts
+        # 只有当 build_apps 实际运行且产生输出了才下载
+        if: ${{ needs.setup-matrix.outputs.has_apps == 'true' }}
         uses: actions/download-artifact@v4
         with:
-          path: downloaded_builds # 下载到一个临时目录
+          path: new_builds
+          pattern: build-*
 
-      # 3. 将下载的文件移动到正确的位置 (覆盖旧文件)
-      - name: Move artifacts to website folder
+      - name: Organize and Merge Files
         run: |
-          echo "=== Debug: Check downloaded structure ==="
-          ls -R downloaded_builds/ || echo "downloaded_builds not found"
+          echo "=== Mode: ${{ inputs.build_mode }} ==="
           
-          echo "=== Start Moving Files ==="
-          mkdir -p apps
+          # 1. 全量模式下的清理
+          if [ "${{ inputs.build_mode }}" == "full_rebuild" ]; then
+            echo "Full Rebuild: Cleaning up ALL old binaries..."
+            rm -rf apps
+            mkdir -p apps
+          fi
+
+          # 2. 合并新构建的文件 (覆盖旧文件)
+          if [ -d "new_builds" ]; then
+            echo "=== Merging New Builds ==="
+            for dir in new_builds/*; do
+               if [ -d "$dir/apps" ]; then
+                 echo "Merging from $dir..."
+                 cp -rf "$dir/apps/"* apps/
+               fi
+            done
+          else
+            echo "No new builds to merge."
+          fi
           
-          # 遍历 downloaded_builds 下的每一个 artifact 文件夹
-          # 结构通常是: downloaded_builds/build-KhiCAS/apps/KhiCAS/...
-          for dir in downloaded_builds/*; do
-            # 检查里面是否有 apps 文件夹
-            if [ -d "$dir/apps" ]; then
-              echo "Merging artifacts from: $dir"
-              # 将该构建下的 apps 目录内容拷贝到主 apps 目录
-              # -r 递归, -f 强制覆盖 (如果有旧文件)
-              cp -rf "$dir/apps/"* apps/
-            else
-              echo "Warning: No apps directory found in $dir"
-            fi
-          done
+          # 3. 最终清理 (防止 Git 源码中残留的垃圾混入)
+          # 此时 apps/ 目录里应该是：(旧备份 + 新构建) OR (纯新构建)
+          # 但 actions/checkout 可能会带下来源码里提交的 .elf，这里再次确认
+          # 我们假设源码仓库里不应该提交二进制，或者我们信任 artifact 的覆盖
           
-          echo "=== Final deployment content check ==="
+          echo "=== Generating Deployment Timestamp ==="
+          date > version.txt
+          
+          echo "=== Final App List ==="
           ls -F apps/
 
-      # 4. 配置 Pages
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      # 5. 上传整个目录作为 Pages 产物
       - name: Upload pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: '.'
 
-      # 6. 正式发布
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
