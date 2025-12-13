@@ -77,13 +77,12 @@ src/lib/libmpfr.a src/include/mpfr.h: src/lib/libgmp.a src/include/gmp.h libDire
 src/lib/libmicropy.a: libDirectory
 	cd src/micropython-1.12/numworks
 #   ------------------------------------------------------------
-#   【终极修复方案】
-#   直接修改 ../py/mkrules.mk 中的编译命令 (compile_c 宏)。
-#   我们利用 sed 找到 "$(CC) $(CFLAGS)" 这一段，
-#   并在后面强制插入 "-Wno-error=alloca-larger-than"。
-#   注意：Makefile 中的 $ 符号在 sed 中需要转义。
+#   【修复方案 - 版本 3.0】
+#   之前的参数编译器不识别。
+#   现在的策略是：直接使用 -Wno-error。
+#   这会告诉编译器："即使有警告（包括那个内存过大的警告），也不要报错停止，继续编译！"
 #   ------------------------------------------------------------
-	sed -i 's/\$$(CC) \$$(CFLAGS)/\$$(CC) \$$(CFLAGS) -Wno-error=alloca-larger-than/g' ../py/mkrules.mk || true
+	sed -i 's/\$$(CC) \$$(CFLAGS)/\$$(CC) \$$(CFLAGS) -Wno-error/g' ../py/mkrules.mk || true
 # We need to use a script to build MicroPython, because the make command crashes in MicroPython because it tries to link without the required libraries
 	./mklib
 
