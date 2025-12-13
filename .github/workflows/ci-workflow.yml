@@ -1,4 +1,4 @@
-name: Smart Build & Push
+name: Smart Build & Push (Fixed Environment)
 
 on:
   workflow_dispatch:
@@ -13,10 +13,12 @@ on:
           - 'full_rebuild'
 
 permissions:
-  contents: write # 只需要写权限，不需要 pages 权限
+  contents: write # 只需要写仓库权限
 
 jobs:
-  # JOB 1: 分析 (保持不变)
+  # =========================================================
+  # JOB 1: 智能分析 (保持不变)
+  # =========================================================
   setup-matrix:
     runs-on: ubuntu-latest
     outputs:
@@ -41,7 +43,9 @@ jobs:
             echo "has_apps=false" >> $GITHUB_OUTPUT
           fi
 
-  # JOB 2: 构建 (保持不变)
+  # =========================================================
+  # JOB 2: 构建 App (关键修复：恢复了完整的依赖列表)
+  # =========================================================
   build_apps:
     needs: setup-matrix
     if: ${{ needs.setup-matrix.outputs.has_apps == 'true' }}
@@ -53,34 +57,46 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { submodules: true }
-      - name: Install Deps
-        run: sudo apt-get update && sudo apt-get install -y build-essential libmpfr-dev libmpfi-dev libpari-dev libfltk1.3-dev binutils-arm-none-eabi gcc-arm-none-eabi
-      - name: Build
-        run: make ${{ matrix.app }}_rebuild
-      # 依旧上传 Artifact，用于在不同 Job 间传递文件
+
+      # [修复点 1] 恢复完整的依赖列表，确保 KhiCAS 有 GMP/MPFR 等库支持
+      - name: Install Full Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive
+
+      # [修复点 2] 恢复 KhiCAS 的 MicroPython 补丁，防止把警告当错误处理
+      - name: Build ${{ matrix.app }}
+        run: |
+          if [ -f "apps/KhiCAS/Makefile" ] && [ "${{ matrix.app }}" == "KhiCAS" ]; then
+             echo "Applying MicroPython patch for KhiCAS..."
+             sed -i 's/\$$(CC) \$$(CFLAGS)/\$$(CC) \$$(CFLAGS) -Wno-error/g' apps/KhiCAS/src/micropython-1.12/py/mkrules.mk || true
+          fi
+          make ${{ matrix.app }}_rebuild
+
       - uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.app }}
-          path: apps/${{ matrix.app }}/app.elf
+          path: |
+            apps/${{ matrix.app }}/app.elf
+            apps/${{ matrix.app }}/app.icon
 
-  # =================================================================================
-  # JOB 3: 这里的逻辑就是你想要的 -> 拿回旧文件，覆盖新文件，提交
-  # =================================================================================
+  # =========================================================
+  # JOB 3: 更新网站 (使用你认可的“直接修改”逻辑)
+  # =========================================================
   update_site:
     runs-on: ubuntu-latest
     needs: [setup-matrix, build_apps]
     if: always()
-    
     steps:
-      # 1. "复制原网站的所有文件" -> 本质就是检出 gh-pages 分支
+      # 1. 检出 gh-pages 分支 (即你的网站本体)
       - name: Checkout Website Branch
         uses: actions/checkout@v4
         with:
-          ref: gh-pages # 这是一个标准分支，用来存放网站文件
+          ref: gh-pages
           path: website_root
-        continue-on-error: true # 第一次如果没有这个分支，不报错
+        continue-on-error: true
 
-      # 2. 如果第一次运行，没有这个分支，就创建空文件夹
+      # 2. 初始化 (如果是第一次)
       - name: Init if Missing
         run: |
           if [ ! -d "website_root" ]; then
@@ -92,12 +108,12 @@ jobs:
             cd ..
           fi
 
-      # 3. 如果是全量重构，清空旧文件
+      # 3. 清理 (如果是全量重构)
       - name: Clean if Full Rebuild
         if: ${{ inputs.build_mode == 'full_rebuild' }}
         run: rm -rf website_root/apps
 
-      # 4. 下载新编译好的文件
+      # 4. 下载构建好的文件
       - name: Download Artifacts
         if: ${{ needs.setup-matrix.outputs.has_apps == 'true' }}
         uses: actions/download-artifact@v4
@@ -105,7 +121,7 @@ jobs:
           path: temp_artifacts
           pattern: build-*
 
-      # 5. 把新文件塞进去 (增量更新逻辑)
+      # 5. 移动文件 (增量覆盖)
       - name: Merge New Apps
         run: |
           if [ ! -d "temp_artifacts" ]; then echo "No artifacts"; exit 0; fi
@@ -115,12 +131,8 @@ jobs:
             if [ -d "$artifact" ]; then
               APP_NAME=$(basename "$artifact" | sed 's/build-//')
               echo "Updating $APP_NAME..."
-              
-              # 目标路径: website_root/apps/App名字/
               TARGET_DIR="website_root/apps/$APP_NAME"
               mkdir -p "$TARGET_DIR"
-              
-              # 查找并复制 .elf
               find "$artifact" -name "app.elf" -exec cp {} "$TARGET_DIR/" \;
               find "$artifact" -name "app.icon" -exec cp {} "$TARGET_DIR/" \;
             fi
@@ -136,7 +148,7 @@ jobs:
           done
           echo "</ul>" >> index.html
 
-      # 7. 提交并推送 -> 这一步完成后，GitHub Pages 会自动触发另一个系统内置的工作流来发布
+      # 7. 提交更改 (GitHub 会自动发布)
       - name: Push Changes
         run: |
           cd website_root
