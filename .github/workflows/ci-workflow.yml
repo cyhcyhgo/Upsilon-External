@@ -1,168 +1,120 @@
-name: Continuous integration
-#on: [pull_request, push]1
+name: Build and Deploy Master
+
 on:
   push:
-  pull_request:
+    branches: ["master", "main"]
   workflow_dispatch:
 
+# 设置权限：允许读取代码、写入 Pages、写入 ID Token (用于 OIDC 认证)
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 并发策略：如果发起了新的部署，取消正在进行的旧部署
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
 jobs:
-  KhiCAS:
+  # =================================================================================
+  # JOB 1: 构建所有 Apps (使用 Matrix 矩阵策略，避免重复代码)
+  # =================================================================================
+  build_apps:
     runs-on: ubuntu-latest
-    steps:
-      - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
+    strategy:
+      fail-fast: false # 如果其中一个 App 构建失败，不要取消其他 App 的构建
+      matrix:
+        # 在这里列出所有需要构建的 App 名称
+        app: 
+          - KhiCAS
+          - BadApple
+          - CHIP-8
+          - Example
+          - Example-Cpp
+          - Flash2Ram
+          - HexEdit
+          - Nofrendo
+          - Peanut-GB
+          - Periodic
+          - UnitCircle
 
-      - uses: actions/checkout@v1
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           submodules: true
-      - run: make -C apps/KhiCAS cleanall
-      - run: make KhiCAS_rebuild
-      - run: ./tool/archive KhiCAS.tar KhiCAS
-      - uses: actions/upload-artifact@master
-        with:
-          name: KhiCAS
-          path: KhiCAS.tar
-  BadApple:
-    runs-on: ubuntu-latest
-    steps:
-      - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
 
-      - uses: actions/checkout@v1
-        with:
-          submodules: true
-      - run: make BadApple_rebuild
-      - run: ./tool/archive BadApple.tar BadApple
-      - uses: actions/upload-artifact@master
-        with:
-          name: BadApple
-          path: BadApple.tar
-  CHIP-8:
-    runs-on: ubuntu-latest
-    steps:
-      - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
+      # 安装所有依赖 (这一长串只需要写一次)
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive
 
-      - uses: actions/checkout@v1
-        with:
-          submodules: true
-      - run: make CHIP-8_rebuild
-      - run: ./tool/archive CHIP-8.tar CHIP-8
-      - uses: actions/upload-artifact@master
-        with:
-          name: CHIP-8
-          path: CHIP-8.tar
-  Example:
-    runs-on: ubuntu-latest
-    steps:
-      - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
+      # 构建 App
+      # 动态使用 ${{ matrix.app }} 来填入当前的任务名称
+      - name: Build ${{ matrix.app }}
+        run: make ${{ matrix.app }}_rebuild
 
-      - uses: actions/checkout@v1
+      # 上传构建产物
+      # 重点：我们要上传 .elf 和 .icon，而不是 tar 包
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          submodules: true
-      - run: make Example_rebuild
-      - run: ./tool/archive Example.tar Example
-      - uses: actions/upload-artifact@master
-        with:
-          name: Example
-          path: Example.tar
-  Example-Cpp:
-    runs-on: ubuntu-latest
-    steps:
-      - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
-
-      - uses: actions/checkout@v1
-        with:
-          submodules: true
-      - run: make Example-Cpp_rebuild
-      - run: ./tool/archive Example-Cpp.tar Example-Cpp
-      - uses: actions/upload-artifact@master
-        with:
-          name: Example-Cpp
-          path: Example-Cpp.tar
-  Flash2Ram:
-    runs-on: ubuntu-latest
-    steps:
-      - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
-
-      - uses: actions/checkout@v1
-        with:
-          submodules: true
-      - run: make Flash2Ram_rebuild
-      - run: ./tool/archive Flash2Ram.tar Flash2Ram
-      - uses: actions/upload-artifact@master
-        with:
-          name: Flash2Ram
-          path: Flash2Ram.tar
-  HexEdit:
-    runs-on: ubuntu-latest
-    steps:
-      - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
-
-      - uses: actions/checkout@v1
-        with:
-          submodules: true
-      - run: make HexEdit_rebuild
-      - run: ./tool/archive HexEdit.tar HexEdit
-      - uses: actions/upload-artifact@master
-        with:
-          name: HexEdit
-          path: HexEdit.tar
-  Nofrendo:
-    runs-on: ubuntu-latest
-    steps:
-      - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
-
-      - uses: actions/checkout@v1
-        with:
-          submodules: true
-      - run: make Nofrendo_rebuild
-      - run: ./tool/archive Nofrendo.tar Nofrendo
-      - uses: actions/upload-artifact@master
-        with:
-          name: Nofrendo
-          path: Nofrendo.tar
-  Peanut-GB:
-    runs-on: ubuntu-latest
-    steps:
-      - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
-
-      - uses: actions/checkout@v1
-        with:
-          submodules: true
-      - run: make Peanut-GB_rebuild
-      - run: ./tool/archive Peanut-GB.tar Peanut-GB
-      - uses: actions/upload-artifact@master
-        with:
-          name: Peanut-GB
-          path: Peanut-GB.tar
-  Periodic:
-    runs-on: ubuntu-latest
-    steps:
-      - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
-
-      - uses: actions/checkout@v1
-        with:
-          submodules: true
-      - run: make Periodic_rebuild
-      - run: ./tool/archive Periodic.tar Periodic
-      - uses: actions/upload-artifact@master
-        with:
-          name: Periodic
-          path: Periodic.tar
-  UnitCircle:
-    runs-on: ubuntu-latest
-    steps:
-      - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
-
-      - uses: actions/checkout@v1
-        with:
-          submodules: true
-      - run: make UnitCircle_rebuild
-      - run: ./tool/archive UnitCircle.tar UnitCircle
-      - uses: actions/upload-artifact@master
-        with:
-          name: UnitCircle
+          # 给每个产物起个独一无二的名字，例如 build-KhiCAS
+          name: build-${{ matrix.app }}
+          # 指定要上传的文件路径
           path: |
-            apps/UnitCircle/app.elf
-            UnitCircle.tar
+            apps/${{ matrix.app }}/app.elf
+            apps/${{ matrix.app }}/app.icon
+          if-no-files-found: warn
 
-env:
-  ACCEPT_OFFICIAL_TOS: 1
+  # =================================================================================
+  # JOB 2: 部署到 GitHub Pages (必须等待上面的构建全部完成)
+  # =================================================================================
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build_apps # <--- 关键：依赖于上面的 build_apps 任务
+    
+    steps:
+      # 1. 检出网页源码
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. 下载所有构建好的 App 文件
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded_builds # 下载到一个临时目录
+
+      # 3. 将下载的文件移动到正确的位置 (覆盖旧文件)
+      - name: Move artifacts to website folder
+        run: |
+          echo "Organizing files..."
+          # 遍历下载下来的每个构建文件夹
+          # 结构大约是: downloaded_builds/build-UnitCircle/apps/UnitCircle/app.elf
+          
+          # 我们使用 rsync 或 cp 将它们合并到当前目录的 apps/ 文件夹下
+          # -a: archive mode, -v: verbose
+          rsync -av downloaded_builds/*/apps/ apps/
+          
+          echo "Listing checks:"
+          ls -R apps/UnitCircle/ || echo "UnitCircle not found"
+
+      # 4. 配置 Pages
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      # 5. 上传整个目录作为 Pages 产物
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      # 6. 正式发布
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
