@@ -76,16 +76,14 @@ src/lib/libmpfr.a src/include/mpfr.h: src/lib/libgmp.a src/include/gmp.h libDire
 	cp src/mpfr.h ../include/mpfr.h
 src/lib/libmicropy.a: libDirectory
 	cd src/micropython-1.12/numworks
-#   ========================================================================
-#   【修复步骤】
-#   因为 py/mkrules.mk 文件控制着编译参数，我们用 sed 命令动态修改它。
-#   我们在原来的 CFLAGS 后面追加 -Wno-error=alloca-larger-than
-#   这样编译器就会忽略 "alloca is too large" 的错误。
-#   ========================================================================
-	sed -i 's/CFLAGS += -std=gnu99/CFLAGS += -std=gnu99 -Wno-error=alloca-larger-than/g' ../py/mkrules.mk || true
-	
-#   如果上面的 sed 没匹配到，尝试暴力移除 -Werror (备选方案)
-	sed -i 's/-Werror /-Werror -Wno-error=alloca-larger-than /g' ../py/mkrules.mk || true
+#   ------------------------------------------------------------
+#   【终极修复方案】
+#   直接修改 ../py/mkrules.mk 中的编译命令 (compile_c 宏)。
+#   我们利用 sed 找到 "$(CC) $(CFLAGS)" 这一段，
+#   并在后面强制插入 "-Wno-error=alloca-larger-than"。
+#   注意：Makefile 中的 $ 符号在 sed 中需要转义。
+#   ------------------------------------------------------------
+	sed -i 's/\$$(CC) \$$(CFLAGS)/\$$(CC) \$$(CFLAGS) -Wno-error=alloca-larger-than/g' ../py/mkrules.mk || true
 # We need to use a script to build MicroPython, because the make command crashes in MicroPython because it tries to link without the required libraries
 	./mklib
 
