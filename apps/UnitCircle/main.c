@@ -36,7 +36,7 @@ void extapp_main(void) {
     uint8_t id[3];
     char msg[30];
     read_id(id);
-    sprintf(msg, "id=0x%02X%02X%02X\r\n", id[0], id[1], id[2]);
+    sprintf(msg, "screen id=0x%02X%02X%02X\0", id[0], id[1], id[2]);
 
     // Max RAW :
  // extapp_drawTextLarge("This is going to be a unit circl", 0, 20 * 4, 0x0000, 0xFFFF, false);
