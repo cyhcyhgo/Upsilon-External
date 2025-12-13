@@ -133,6 +133,16 @@ jobs:
           
           # 添加 .nojekyll 防止 GitHub 忽略下划线文件
           touch website_root/.nojekyll
+          
+      # ========================================================
+      # 补充逻辑：如果是全量重构，先清空 apps 文件夹，保证干净
+      # ========================================================
+      - name: Clean Apps if Full Rebuild
+        if: ${{ inputs.build_mode == 'full_rebuild' }}
+        run: |
+          echo "Full Rebuild Mode: Cleaning old apps..."
+          # 保留 external.ld，删除其他所有 App 文件夹
+          find website_root/apps/ -mindepth 1 -maxdepth 1 ! -name "external.ld" -exec rm -rf {} +
 
       # 4. 下载本次构建的新 App
       - name: Download New Artifacts
