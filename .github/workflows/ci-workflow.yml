@@ -81,20 +81,20 @@ jobs:
             apps/${{ matrix.app }}/app.icon
 
   # =========================================================
-  # JOB 3: 精准同步与发布
+  # JOB 3: 精准同步 (修复图片与重复文件)
   # =========================================================
   deploy_site:
     runs-on: ubuntu-latest
     needs: [setup-matrix, build_apps]
     if: always()
     steps:
-      # 1. 检出源码 (main) -> 获取最新的 index.html, libs, apps.js 等
+      # 1. 检出源码 (main)
       - name: Checkout Source Code
         uses: actions/checkout@v4
         with:
           path: source_code
 
-      # 2. 检出网站分支 (gh-pages) -> 获取旧的 App 二进制文件
+      # 2. 检出网站分支 (gh-pages)
       - name: Checkout Website Branch
         uses: actions/checkout@v4
         with:
@@ -102,37 +102,50 @@ jobs:
           path: website_root
         continue-on-error: true
 
-      # 3. 初始化网站目录 (防止第一次运行报错)
+      # 3. 初始化与清理
       - name: Prepare Website Root
         run: |
+          # 确保目录存在
           if [ ! -d "website_root" ]; then
-            echo "Creating new website root..."
             mkdir website_root
             cd website_root
             git init
             git checkout -b gh-pages
             cd ..
           fi
-          # 确保 apps 目录存在
           mkdir -p website_root/apps
 
-      # 4. 【核心步骤】同步文件 (你的需求实现)
-      - name: Sync Site Files (Exclude App Source)
+          # 【修复 2】强制删除 apps 目录下可能残留的 index.html
+          rm -f website_root/apps/index.html
+
+      # 4. 同步根目录文件 (HTML, JS, Libs)
+      - name: Sync Root Files
         run: |
-          echo ">>> Step A: Syncing root files (HTML, JS, Libs, Images)..."
-          # 使用 rsync 同步所有文件，但完全排除 .git 和 apps 文件夹
-          # 这样 index.html, libs/, images/ 等都会被更新
+          echo ">>> Syncing root files..."
+          # 排除 apps 和 .git，同步其他所有 (包含根目录的 index.html)
           rsync -av --exclude='.git' --exclude='apps' source_code/ website_root/
-
-          echo ">>> Step B: Syncing 'apps/' files ONLY (apps.js, external.ld)..."
-          # 使用 find 命令，只查找 apps/ 下的“文件”，不查找“目录”
-          # 这样就复制了 apps.js, external.ld，但跳过了 apps/KhiCAS/ 等源码目录
-          find source_code/apps -maxdepth 1 -type f -exec cp {} website_root/apps/ \;
-
-          echo ">>> Step C: Ensuring .nojekyll exists..."
+          
+          # 确保 .nojekyll
           touch website_root/.nojekyll
 
-      # 5. 下载本次构建的新 App
+      # 5. 同步 apps 目录下的必要文件 (apps.js, external.ld)
+      - name: Sync Apps Config Files
+        run: |
+          echo ">>> Syncing apps/*.js and apps/*.ld..."
+          # 只查找文件，排除 index.html
+          find source_code/apps -maxdepth 1 -type f -not -name "index.html" -exec cp {} website_root/apps/ \;
+
+      # 6. 【修复 1】从源码中提取 icon.png
+      - name: Sync App Icons from Source
+        run: |
+          echo ">>> Extracting icon.png from source..."
+          cd source_code
+          # 查找 apps 文件夹下所有的 icon.png
+          # --parents 会保留路径结构 (例如 apps/Video/icon.png)
+          find apps -name "icon.png" -exec cp --parents {} ../website_root/ \;
+          cd ..
+
+      # 7. 下载构建产物 (app.elf, app.icon)
       - name: Download New Artifacts
         if: ${{ needs.setup-matrix.outputs.has_apps == 'true' }}
         uses: actions/download-artifact@v4
@@ -140,26 +153,26 @@ jobs:
           path: temp_artifacts
           pattern: build-*
 
-      # 6. 合并新编译的 App
-      - name: Merge New Compiled Apps
+      # 8. 合并构建产物
+      - name: Merge Compiled Binaries
         run: |
           if [ -d "temp_artifacts" ]; then
             for artifact in temp_artifacts/build-*; do
               if [ -d "$artifact" ]; then
                 APP_NAME=$(basename "$artifact" | sed 's/build-//')
-                echo "Deploying Binary for: $APP_NAME"
+                echo "Deploying Binary: $APP_NAME"
                 
                 TARGET_DIR="website_root/apps/$APP_NAME"
                 mkdir -p "$TARGET_DIR"
                 
-                # 只复制二进制文件和图标，覆盖旧的
+                # 复制 elf 和 icon (二进制格式)
                 find "$artifact" -name "app.elf" -exec cp {} "$TARGET_DIR/" \;
                 find "$artifact" -name "app.icon" -exec cp {} "$TARGET_DIR/" \;
               fi
             done
           fi
 
-      # 7. 提交并推送
+      # 9. 提交
       - name: Push to gh-pages
         run: |
           cd website_root
@@ -167,10 +180,9 @@ jobs:
           git config user.email "bot@action"
           git add .
           
-          # 检查是否有变化
           if git diff --staged --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "Sync site and update apps [$(date)]"
+            git commit -m "Deploy site (Fixed icons & html) [$(date)]"
             git push origin HEAD:gh-pages --force
           fi
