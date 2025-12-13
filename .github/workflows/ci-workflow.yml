@@ -80,21 +80,21 @@ jobs:
             apps/${{ matrix.app }}/app.elf
             apps/${{ matrix.app }}/app.icon
 
- # =========================================================
-  # JOB 3: 组装完整网站并发布
+  # =========================================================
+  # JOB 3: 精准同步与发布
   # =========================================================
   deploy_site:
     runs-on: ubuntu-latest
     needs: [setup-matrix, build_apps]
     if: always()
     steps:
-      # 1. 检出当前源码 (Main分支) -> 用于获取 HTML/JS/CSS
+      # 1. 检出源码 (main) -> 获取最新的 index.html, libs, apps.js 等
       - name: Checkout Source Code
         uses: actions/checkout@v4
         with:
           path: source_code
 
-      # 2. 检出目标分支 (gh-pages) -> 用于保留以前发布的 Apps
+      # 2. 检出网站分支 (gh-pages) -> 获取旧的 App 二进制文件
       - name: Checkout Website Branch
         uses: actions/checkout@v4
         with:
@@ -102,49 +102,37 @@ jobs:
           path: website_root
         continue-on-error: true
 
-      # 3. 初始化网站目录结构
-      - name: Prepare Website
+      # 3. 初始化网站目录 (防止第一次运行报错)
+      - name: Prepare Website Root
         run: |
-          # 如果 website_root 不存在，创建它
           if [ ! -d "website_root" ]; then
+            echo "Creating new website root..."
             mkdir website_root
             cd website_root
             git init
             git checkout -b gh-pages
             cd ..
           fi
-
-          # 【关键步骤】从源码复制网页基础文件到 website_root
-          echo "Copying static web files..."
-          cp source_code/index.html website_root/
-          cp source_code/index.js website_root/
-          cp source_code/index.css website_root/
-          # 复制必要的文件夹
-          cp -r source_code/libs website_root/
-          cp -r source_code/images website_root/
-          
           # 确保 apps 目录存在
           mkdir -p website_root/apps
-          
-          # 【特别注意】复制 external.ld，这是 JS 必须的
-          if [ -f "source_code/apps/external.ld" ]; then
-             cp source_code/apps/external.ld website_root/apps/
-          fi
-          
-          # 添加 .nojekyll 防止 GitHub 忽略下划线文件
-          touch website_root/.nojekyll
-          
-      # ========================================================
-      # 补充逻辑：如果是全量重构，先清空 apps 文件夹，保证干净
-      # ========================================================
-      - name: Clean Apps if Full Rebuild
-        if: ${{ inputs.build_mode == 'full_rebuild' }}
-        run: |
-          echo "Full Rebuild Mode: Cleaning old apps..."
-          # 保留 external.ld，删除其他所有 App 文件夹
-          find website_root/apps/ -mindepth 1 -maxdepth 1 ! -name "external.ld" -exec rm -rf {} +
 
-      # 4. 下载本次构建的新 App
+      # 4. 【核心步骤】同步文件 (你的需求实现)
+      - name: Sync Site Files (Exclude App Source)
+        run: |
+          echo ">>> Step A: Syncing root files (HTML, JS, Libs, Images)..."
+          # 使用 rsync 同步所有文件，但完全排除 .git 和 apps 文件夹
+          # 这样 index.html, libs/, images/ 等都会被更新
+          rsync -av --exclude='.git' --exclude='apps' source_code/ website_root/
+
+          echo ">>> Step B: Syncing 'apps/' files ONLY (apps.js, external.ld)..."
+          # 使用 find 命令，只查找 apps/ 下的“文件”，不查找“目录”
+          # 这样就复制了 apps.js, external.ld，但跳过了 apps/KhiCAS/ 等源码目录
+          find source_code/apps -maxdepth 1 -type f -exec cp {} website_root/apps/ \;
+
+          echo ">>> Step C: Ensuring .nojekyll exists..."
+          touch website_root/.nojekyll
+
+      # 5. 下载本次构建的新 App
       - name: Download New Artifacts
         if: ${{ needs.setup-matrix.outputs.has_apps == 'true' }}
         uses: actions/download-artifact@v4
@@ -152,36 +140,37 @@ jobs:
           path: temp_artifacts
           pattern: build-*
 
-      # 5. 合并 App 到 website_root/apps
-      - name: Merge Apps
+      # 6. 合并新编译的 App
+      - name: Merge New Compiled Apps
         run: |
           if [ -d "temp_artifacts" ]; then
             for artifact in temp_artifacts/build-*; do
               if [ -d "$artifact" ]; then
                 APP_NAME=$(basename "$artifact" | sed 's/build-//')
-                echo "Deploying App: $APP_NAME"
+                echo "Deploying Binary for: $APP_NAME"
                 
                 TARGET_DIR="website_root/apps/$APP_NAME"
                 mkdir -p "$TARGET_DIR"
                 
-                # 覆盖旧文件
+                # 只复制二进制文件和图标，覆盖旧的
                 find "$artifact" -name "app.elf" -exec cp {} "$TARGET_DIR/" \;
                 find "$artifact" -name "app.icon" -exec cp {} "$TARGET_DIR/" \;
               fi
             done
           fi
 
-      # 6. 生成应用列表 apps.json (index.js 依赖 angular 注入 apps 变量)
-      # 注意：原始代码是通过 script 标签注入 apps 列表的，我们需要动态生成这个 script 或者 json
-      # 根据你的 index.html 结构，通常有一个 apps.json 或者是在 HTML 里写死的。
-      # 这里我们可以生成一个简单的 index.html 索引列表作为备用，
-      # 或者如果你的 index.js 需要读取 apps 目录，确保目录结构正确即可。
-      
+      # 7. 提交并推送
       - name: Push to gh-pages
         run: |
           cd website_root
           git config user.name "Action Bot"
           git config user.email "bot@action"
           git add .
-          git commit -m "Deploy website and apps [$(date)]" || echo "No changes"
-          git push origin HEAD:gh-pages --force
+          
+          # 检查是否有变化
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Sync site and update apps [$(date)]"
+            git push origin HEAD:gh-pages --force
+          fi
