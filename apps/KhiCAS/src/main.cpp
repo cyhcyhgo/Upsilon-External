@@ -206,4 +206,11 @@ bool inexammode(){
   return extapp_inexammode();
 }
 
+// 修复 newlib-nano 缺失 __ssputws_r 的问题
+int __ssputws_r(void * _reent, const wchar_t * wstr, void * file) {
+    // 这里不需要通过，直接返回 0 (EOF) 或者错误即可
+    // 因为在计算器上我们极大概率不需要宽字符打印到流
+    return 0; 
+}
+
 } // end extern "C"
