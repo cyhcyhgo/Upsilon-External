@@ -73,6 +73,21 @@ jobs:
           fi
           make ${{ matrix.app }}_rebuild
 
+      # [新增步骤] 验证链接 (Dry Run)
+      # 这一步会尝试运行 ./tool/archive，如果链接失败会直接报错退出
+      # 我们只对 KhiCAS 执行此检查，或者对所有 App 执行都可以
+      - name: Verify Linker (Archive Step)
+        if: ${{ matrix.app == 'KhiCAS' }}  # 仅针对 KhiCAS，或者去掉这行对所有 App 验证
+        run: |
+          echo "Verifying linking process for ${{ matrix.app }}..."
+          # 尝试运行 archive 工具生成 tar 包
+          # 如果这里报错 "undefined reference"，GitHub Action 会标记为失败
+          ./tool/archive ${{ matrix.app }}_verify.tar ${{ matrix.app }}
+          
+          echo "Link verification successful!"
+          # 验证完后删除生成的测试包，以免占用空间或混淆后续步骤
+          rm ${{ matrix.app }}_verify.tar
+
       - uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.app }}
