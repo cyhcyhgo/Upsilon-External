@@ -18,7 +18,6 @@
  */
 #ifndef _GIAC_GLOBAL_H
 #define _GIAC_GLOBAL_H
-//#define USE_OBJET_BIDON
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -35,7 +34,7 @@
 #if defined VISUALC || defined BESTA_OS || defined FREERTOS
 typedef long pid_t;
 #else // VISUALC
-#if !defined(__MINGW_H) && !defined(HP39) && !defined(NSPIRE) && !defined(FXCG) && !defined(__ANDROID__) && !defined(NSPIRE_NEWLIB) && !defined(OSX) && !defined(IOS) && !defined(OSXIOS) && !defined(FIR_LINUX) && !defined(PRIMEWEBASM)
+#if !defined(__MINGW_H) && !defined(NSPIRE) && !defined(FXCG) && !defined(__ANDROID__) && !defined(NSPIRE_NEWLIB) && !defined(OSX) && !defined(IOS) && !defined(OSXIOS) && !defined(FIR_LINUX) && !defined(PRIMEWEBASM)
 #include "wince_replacements.h"
 #endif
 #ifdef __MINGW_H
@@ -110,7 +109,7 @@ extern "C" int ctrl_c_interrupted(int exception);
 extern "C" void console_print(const char * s);
 extern "C" const char * console_prompt(const char * s);
 
-bool dfu_get_scriptstore_addr(size_t & start,size_t & taille,char & altdfu);
+bool dfu_get_scriptstore_addr(size_t & start,size_t & taille);
 bool dfu_get_scriptstore(const char * fname);
 bool dfu_send_scriptstore(const char * fname);
 bool dfu_send_rescue(const char * fname);
@@ -119,7 +118,6 @@ const int nwstoresize1=0x8000,nwstoresize2=0x8014;
 // send to 0x90000000+offset*0x10000
 bool dfu_send_firmware(const char * fname,int offset);
 bool dfu_send_apps(const char * fname);
-bool dfu_send_slotab(const char * fnamea,const char * fnameb1,const char * fnameb2);
 bool dfu_update_khicas(const char * fname); 
 
 #if defined HAVE_LIBMICROPYTHON
@@ -224,8 +222,6 @@ void giac_sha256_final(SHA256_CTX *ctx, BYTE hash[]);
 #ifndef NO_NAMESPACE_GIAC
 namespace giac {
 #endif // ndef NO_NAMESPACE_GIAC
-
-  bool my_isalpha(char c); // avoid assert failure with isalpha on visualc
 
   // 3 or 1 if a list of space separated commandnames includes buf
   int dichotomic_search(const char * const * tab,unsigned tab_size,const char * s);
@@ -372,14 +368,10 @@ Boolean isLegalUTF8Sequence(const UTF8 *source, const UTF8 *sourceEnd);
   extern int FACTORIAL_SIZE_LIMIT;
   extern int GAMMA_LIMIT;
   extern int LIST_SIZE_LIMIT;
-  extern int ABERTH_NMAX; // max number of iterations
-  extern int ABERTH_NBITSMAX; // max precision
   extern int NEWTON_DEFAULT_ITERATION;
-  extern int NEWTON_MAX_RANDOM_RESTART;
   extern int DEFAULT_EVAL_LEVEL;
   extern int PARENTHESIS_NWAIT;
   extern int MAX_PROD_EXPAND_SIZE;
-  extern int MAX_SIMPLIFIER_VECTSIZE;
 
   extern int TEST_PROBAB_PRIME; // probabilistic primality tests
   extern int GCDHEU_MAXTRY; // maximal number of retry for heuristic algorithms
@@ -398,20 +390,13 @@ Boolean isLegalUTF8Sequence(const UTF8 *source, const UTF8 *sourceEnd);
   // Should be lower for larger coeff
   extern int MAX_ALG_EXT_ORDER_SIZE; // x^1/d extension not algebraic if d>
   extern int MAX_COMMON_ALG_EXT_ORDER_SIZE;
-  extern int LAZY_ALG_EXT;
-  extern int ALG_EXT_DIGITS;
-  // 0 use a unique algebraic extension, >0: don't search a unique alg ext if degree is >
   extern int TRY_FU_UPRIME;
-  extern int TRY_FU_UPRIME_MAXLEAFSIZE;
   extern int SOLVER_MAX_ITERATE;
   extern int MAX_PRINTABLE_ZINT;
   extern int MAX_RECURSION_LEVEL;
   extern int GBASIS_DETERMINISTIC;
   extern int GBASISF4_MAX_TOTALDEG;
   extern int GBASISF4_MAXITER;
-  extern int GBASIS_COEFF_STRATEGY;
-  extern float GBASIS_COEFF_MAXLOGRATIO;
-  extern int RUR_PARAM_MAX_DEG;
   // extern int GBASISF4_BUCHBERGER;
   extern unsigned max_pairs_by_iteration; 
   extern unsigned simult_primes,simult_primes2,simult_primes_seuil2,simult_primes3,simult_primes_seuil3; 
@@ -435,7 +420,6 @@ Boolean isLegalUTF8Sequence(const UTF8 *source, const UTF8 *sourceEnd);
 #endif
   extern double powlog2float;
   extern int MPZ_MAXLOG2;
-  extern int SET_COMPARE_MAXIDNT;
 
 #ifdef WITH_MYOSTREAM
   // replacement for std::cerr
@@ -588,7 +572,7 @@ throw(std::runtime_error("Stopped by user interruption.")); \
   typedef void (* giac_callback)(const giac::gen & ,void * );
 
   struct thread_param {
-    int _kill_thread;
+    bool _kill_thread;
     int thread_eval_status;
     giac_callback f;
     void * f_param;
@@ -599,7 +583,6 @@ throw(std::runtime_error("Stopped by user interruption.")); \
     size_t stacksize;
     void * stackaddr;
 #endif
-    size_t stack;
     thread_param();
   };
 
@@ -657,7 +640,7 @@ throw(std::runtime_error("Stopped by user interruption.")); \
   };
   std::string gen2string(const gen & g);
   const int turtle_length=10;
-#if defined KHICAS || defined SDL_KHICAS
+#ifdef KHICAS
   struct logo_turtle {
     double x,y;
     double theta; // theta is given in degrees or radians dep. on angle_mode
@@ -672,7 +655,7 @@ throw(std::runtime_error("Stopped by user interruption.")); \
     // <0 fill a polygon from previous turtle positions
     logo_turtle(): x(100),y(100),theta(0),visible(true),mark(true),direct(true),color(0),turtle_width(1),radius(0) {}
     inline bool equal_except_nomark(const logo_turtle &t) const {
-      return x==t.x && y==t.y && turtle_width==t.turtle_width && s==t.s && radius==t.radius && visible==t.visible;;
+      return x==t.x && y==t.y && turtle_width==t.turtle_width && s==t.s && radius==t.radius;
     }
   };
 #else // KHICAS
@@ -789,7 +772,7 @@ throw(std::runtime_error("Stopped by user interruption.")); \
     std::string _autosimplify_;
     std::string _lastprog_name_;
     const char * _currently_scanned_;
-#if !defined KHICAS && !defined SDL_KHICAS
+#ifndef KHICAS
     std::vector<logo_turtle> _turtle_stack_; 
 #endif
     double _total_time_;
@@ -831,7 +814,6 @@ throw(std::runtime_error("Stopped by user interruption.")); \
 
   context * clone_context(const context *);
   void init_context(context * ptr);
-  void clear_context(context * ptr);
 
   extern const context * context0;
   std::vector<context *> & context_list();
@@ -839,7 +821,7 @@ throw(std::runtime_error("Stopped by user interruption.")); \
   extern pthread_mutex_t context_list_mutex;
 #endif
   
-#if !defined(RTOS_THREADX) && !defined(BESTA_OS) && !defined(NSPIRE) && !defined(FXCG) && !defined KHICAS && !defined SDL_KHICAS
+#if !defined(RTOS_THREADX) && !defined(BESTA_OS) && !defined(NSPIRE) && !defined(FXCG) && !defined KHICAS
   extern std::map<std::string,context *> * context_names ;
 #endif
 
@@ -978,7 +960,7 @@ throw(std::runtime_error("Stopped by user interruption.")); \
   std::string lastprog_name(GIAC_CONTEXT);
   std::string lastprog_name(const std::string & b,GIAC_CONTEXT);
 
-#if defined KHICAS || defined SDL_KHICAS
+#ifdef KHICAS
   logo_turtle & turtle();
   std::vector<logo_turtle> & turtle_stack();
 #else
@@ -1204,8 +1186,8 @@ throw(std::runtime_error("Stopped by user interruption.")); \
   // Check if a thread_eval is active
   bool is_context_busy(GIAC_CONTEXT);
   // Check and set the kill thread flag
-  int kill_thread(GIAC_CONTEXT);
-  void kill_thread(int b,GIAC_CONTEXT);
+  bool kill_thread(GIAC_CONTEXT);
+  void kill_thread(bool b,GIAC_CONTEXT);
   // Thread eval status = 0 finished, =1 eval, =2 debug_wait_main
   int thread_eval_status(GIAC_CONTEXT);
   void thread_eval_status(int c,GIAC_CONTEXT);

@@ -18,10 +18,8 @@
 #include "config.h"
 #endif
 #include "first.h"
-#ifndef USE_GMP_REPLACEMENTS
 int init_gmp_memory::refcount = 0;
 init_gmp_memory init_gmp_memory_instance;
-#endif
 
 #ifdef HAVE_LIBGC
 #include <new>
@@ -156,30 +154,6 @@ void operator delete[](void* obj){
 }
 #endif // KHICAS
 #endif // GIAC_CHECK_NEW
-
-#if defined NUMWORKS || defined KHICAS
-void* operator new(std::size_t size){
-  void * p =  std::malloc(size);
-  if (!p)
-    exit(0);
-  return p;
-}
-  
-void* operator new[](std::size_t size){
-  void * p =  std::malloc(size);
-  if (!p)
-    exit(0);
-  return p;
-}
-  
-void operator delete(void* obj){
-  free(obj);
-}
-  
-void operator delete[](void* obj){
-  free(obj);
-}
-#endif
 
 #endif
 

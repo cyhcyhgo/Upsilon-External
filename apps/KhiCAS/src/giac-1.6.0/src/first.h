@@ -21,30 +21,8 @@
 #ifndef _GIAC_FIRST_H_
 #define _GIAC_FIRST_H_
 
-#define INT_MAXSHIFT (sizeof(int)*8-1)
-#define INT_MAXSHIFTM1 (sizeof(int)*8-2)
-
-#if __cplusplus >= 201103L || (defined(_MSVC_LANG) && _MSVC_LANG >= 201103L)
-// post-c++11 functional headers changes, thanks to George Huebner
-#define CPP11
-#endif
-  
-// register is deprecated in c++17
-#define register 
-
-
-#ifdef _GLIBCXX_ASSERTIONS
-#undef _GLIBCXX_ASSERTIONS
-#endif
-
-#if defined NUMWORKS && !defined SDL_KHICAS
+#ifdef NUMWORKS
 #define KHICAS 1
-#ifdef NUMWORKS_SLOTBFR
-#define NUMWORKS_SLOTB
-#endif
-#ifdef NUMWORKS_SLOTBEN
-#define NUMWORKS_SLOTB
-#endif
 #endif
 
 #ifndef GIAC_VERSION
@@ -57,7 +35,6 @@
 #define x86_64 1
 #else
 #ifdef __MINGW_H
- 
 #define MINGW32
 #ifndef M_LN2
 #define M_LN2 0.693147180559945310
@@ -73,18 +50,6 @@
 #define M_SQRT2       1.41421356237309505
 #endif
 #endif
-#endif
-
-#ifdef __VISUALC__
-#define M_SQRT2 1.4142135623730950
-#define M_PI_2 1.5707963267948966
-#define M_LN2 0.69314718055994531
-#define M_1_PI 0.31830988618379067
-#endif
-
-#ifdef HP39
-#include <time.h>
-#define M_E 2.7182818284590452
 #endif
 
 // Thanks to Jason Papadopoulos, author of msieve
@@ -108,17 +73,11 @@
 #undef HAVE_LONG_DOUBLE
 #endif
 
-#if defined __VISUALC__ 
-#undef BIGENDIAN
-#endif
-
-
 #ifdef RTOS_THREADX
 #define NO_STDEXCEPT 1
 #endif
 
 #define MAX_INTSTACK 32768 // maximal size for allocating an array by int tab[]
-
 
 #ifdef FXCG
 #define RAND_MAX 2147483647
@@ -138,7 +97,7 @@ inline Bidon operator << (Bidon,const char *){return Bidon();}
 #define COUT Bidon(0) //std::cout
 #define CERR Bidon(0) //std::cout
 typedef unsigned pid_t;
-extern "C" double lgamma(double);
+double lgamma(double);
 #else // FXCG
 
 #ifdef NSPIRE
@@ -196,25 +155,15 @@ typedef double giac_double;
 typedef long double  long_double;
 
 // sprintf replacement
-// calls snprintf instead of sprintf with n=512, assumes s bufsize>=512
-int sprintf512(char *s,const char *format,...);
 int my_sprintf(char * s, const char * format, ...);
 #ifdef GIAC_HAS_STO_38
 //#define WITH_MYOSTREAM
-#endif
-#ifdef TICE
-#if 0 // if we find out that the OS sprintf is faster than nanoprintf, use it instead
-#include <ti/sprintf.h>
-#else
-// fallback
-#define boot_sprintf sprintf
-#endif
 #endif
 
 #ifdef WITH_MYOSTREAM
 #include "myostream.h"
 #else
-#if defined KHICAS || defined SDL_KHICAS //&& defined STATIC_BUILTIN_LEXER_FUNCTION
+#if defined KHICAS //&& defined STATIC_BUILTIN_LEXER_FUNCTION
 #include "stdstream"
 #define my_ostream stdostream
 #else
@@ -610,6 +559,15 @@ inline float ffloor(float f1){
 #endif
 }
 inline float finv(float f1){ return 1/f1; }
+#if defined __APPLE__ || defined EMCC || defined EMCC2 || defined NO_BSD 
+inline float fgamma(float f1){ return tgammaf(f1); }
+#else
+#if defined(__MINGW_H) || defined(VISUALC) || defined(FXCG)// FIXME gamma, not used
+inline float fgamma(float f1){ return f1; }
+#else
+inline float fgamma(float f1){ return gammaf(f1); } // or tgammaf(f1) on some versions of emscripten
+#endif
+#endif
 #ifdef FXCG
 inline float atan2f(float f1,float f2,int rad){ if (rad) return std::atan2(f1,f2); else return std::atan2(f1,f2)*180/3.14159265358979323846;}
 #else
@@ -650,8 +608,4 @@ namespace ustl {
 }
 #endif
 
-//#ifdef __MINGW_H
-#undef RAND_MAX
-#define RAND_MAX 2147483647
-//#endif
 #endif // _GIAC_FIRST_H_

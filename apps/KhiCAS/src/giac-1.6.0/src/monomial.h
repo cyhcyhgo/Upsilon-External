@@ -251,8 +251,7 @@ namespace giac {
     // truncate topmost index value (decrement by 1 the dimension)
     inline monomial<T> trunc1 () const {
 #ifdef DEBUG_SUPPORT
-      if (index.begin()==index.end())
-        assert(0);
+      assert(index.begin()!=index.end());
 #endif
       return monomial<T>(value,index_m(index.begin()+1,index.end()));
     }
@@ -339,15 +338,9 @@ namespace giac {
 
   template<class T> class sort_helper {
   public:
-#ifdef CPP11
-    std::function<bool(const monomial<T> &, const monomial<T> &)> strictly_greater ;
-    sort_helper(const std::function<bool(const monomial<T> &, const monomial<T> &)> is_strictly_greater):strictly_greater(is_strictly_greater) {};
-    sort_helper():strictly_greater(m_lex_is_strictly_greater<T>) {};
-#else
     std::pointer_to_binary_function < const monomial<T> &, const monomial<T> &, bool> strictly_greater ;
     sort_helper(const std::pointer_to_binary_function < const monomial<T> &, const monomial<T> &, bool> is_strictly_greater):strictly_greater(is_strictly_greater) {};
     sort_helper():strictly_greater(std::ptr_fun<const monomial<T> &, const monomial<T> &, bool>(m_lex_is_strictly_greater<T>)) {};
-#endif
     bool operator () (const monomial<T> & a, const monomial<T> & b){ return strictly_greater(a,b);}
   };
 
@@ -445,7 +438,7 @@ namespace giac {
       new_coord.reserve(a_end - a );
       for (;a!=a_end;++a){
 	T tmp=((*a).value) * fact;
-	if (!is_exactly_zero(tmp))
+	if (!is_zero(tmp))
 	  new_coord.push_back(monomial<T>( tmp , (*a).index) );
       }
     }
@@ -684,11 +677,7 @@ namespace giac {
 	     typename std::vector< monomial<T> >::const_iterator & itb_end,
 	     std::vector< monomial<T> > & new_coord,
 	     bool (* is_strictly_greater)( const index_m &, const index_m &),
-#ifdef CPP11
-             const std::function<bool(const monomial<T> &, const monomial<T> &)> m_is_strictly_greater
-#else
 	     const std::pointer_to_binary_function < const monomial<T> &, const monomial<T> &, bool> m_is_strictly_greater
-#endif
 	     ) {
     if (ita==ita_end || itb==itb_end){
       new_coord.clear();
@@ -737,13 +726,8 @@ namespace giac {
 #endif
 #ifndef NSPIRE
     /* other algorithm using a map to avoid reserving too much space */
-#ifdef CPP11
-    typedef std::map< index_t,T,const std::function<bool(const index_m &, const index_m &)> > application;
-    application produit(is_strictly_greater);
-#else
     typedef std::map< index_t,T,const std::pointer_to_binary_function < const index_m &, const index_m &, bool> > application;
     application produit(std::ptr_fun(is_strictly_greater));
-#endif
     // typedef std::map<index_t,T> application;
     // application produit;
     index_t somme(ita->index.size());
@@ -864,11 +848,7 @@ namespace giac {
     typename std::vector< monomial<T> >::const_iterator a=v.begin(), a_end=v.end();
     typename std::vector< monomial<T> >::const_iterator b=w.begin(), b_end=w.end();
     std::vector< monomial<T> > res;
-#ifdef CPP11
-    Mul(a,a_end,b,b_end,res,i_lex_is_strictly_greater,m_lex_is_strictly_greater<T>);
-#else
     Mul(a,a_end,b,b_end,res,i_lex_is_strictly_greater,std::ptr_fun< const monomial<T> &, const monomial<T> &, bool >((m_lex_is_strictly_greater<T>)));
-#endif
     return res ;
   }
 
@@ -876,11 +856,7 @@ namespace giac {
   std::vector< monomial<T> > & operator *= (std::vector< monomial<T> > & v,const std::vector< monomial<T> > & w){
     typename std::vector< monomial<T> >::const_iterator a=v.begin(), a_end=v.end();
     typename std::vector< monomial<T> >::const_iterator b=w.begin(), b_end=w.end();
-#ifdef CPP11
-    Mul(a,a_end,b,b_end,v,i_lex_is_strictly_greater,m_lex_is_strictly_greater<T>);
-#else
     Mul(a,a_end,b,b_end,v,i_lex_is_strictly_greater,std::ptr_fun< const monomial<T> &, const monomial<T> &, bool >((m_lex_is_strictly_greater<T>)));
-#endif
     return v;
   }
 

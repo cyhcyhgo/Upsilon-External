@@ -36,6 +36,11 @@ using namespace std;
 #include "rpn.h"
 #include "plot.h"
 #include "giacintl.h"
+#if defined GIAC_HAS_STO_38 || defined NSPIRE || defined NSPIRE_NEWLIB || defined FXCG || defined GIAC_GGB || defined USE_GMP_REPLACEMENTS || defined KHICAS
+inline bool is_graphe(const giac::gen &g,std::string &disp_out,const giac::context *){ return false; }
+#else
+#include "graphtheory.h"
+#endif
 
 #if !defined NSPIRE && !defined FXCG && !defined GIAC_HAS_STO_38 && !defined KHICAS && !defined NSPIRE_NEWLIB
 #include <fstream>
@@ -627,7 +632,7 @@ namespace giac {
     mathmode=true;
     int n=int(s0.size()),j;
     for (j=n-1;j>=2;--j){
-      if (s0[j]>32 && my_isalpha(s0[j]))
+      if (s0[j]>32 && isalpha(s0[j]))
 	break;
     }
     string s=s0.substr(0,j+1),sadd;
@@ -970,26 +975,16 @@ namespace giac {
       }
     }
     if (g.type==_VECT ){
-      if (!curve && g.subtype==_GROUP__VECT && !g._VECTptr->empty() && g._VECTptr->front().type!=_VECT){ // "compressed" hypersurface?
+      if (!curve && g.subtype==_GROUP__VECT && !has_i(g) && !g._VECTptr->empty() && g._VECTptr->front().type!=_VECT){ // "compressed" hypersurface
 	vecteur v=*evalf_double(g,1,contextptr)._VECTptr;
 	int s=v.size();
 	if (s%3==0){
-	  int i;
-	  for (i=0;i<s;i+=3){
-	    if (v[i].type!=_DOUBLE_ || v[i+1].type!=_DOUBLE_)
-	      break;
+	  for (int i=0;i<s;i+=3){
+	    vx.push_back(v[i]._DOUBLE_val);
+	    vy.push_back(v[i+1]._DOUBLE_val);
+	    vz.push_back(v[i+2]._DOUBLE_val);
 	  }
-	  if (i==s){
-	    for (int i=0;i<s;i+=3){
-	      vx.push_back(v[i]._DOUBLE_val);
-	      vy.push_back(v[i+1]._DOUBLE_val);
-	      if (v[i+2].type==_CPLX)
-		vz.push_back(abs(v[i+2],contextptr)._DOUBLE_val);
-	      else 
-		vz.push_back(v[i+2]._DOUBLE_val);
-	    }
-	    return false;
-	  }
+	  return false;
 	}
       }
       bool ortho=false;
@@ -1226,15 +1221,10 @@ namespace giac {
       sort(v.begin(),v.end());
       m=v[s/10];
       M=v[9*s/10];
-      bool b=(M-m)<0.01*(v[s-1]-v[0]);
-      if (fullview || 1.75*(M-m)>(v[s-1]-v[0]) || b){
-	if (b)
-	  zoom(m,M,3);
-	else {
-	  M=v[s-1];
-	  m=v[0];
-	  zoom(m,M,1.1);
-	}
+      if (fullview || 1.75*(M-m)>(v[s-1]-v[0]) || (M-m)<0.01*(v[s-1]-v[0])){
+	M=v[s-1];
+	m=v[0];
+	zoom(m,M,1.1);
       }
       else
 	zoom(m,M,1/0.8);
@@ -1294,12 +1284,6 @@ namespace giac {
 	if (feu._SYMBptr->sommet==at_inv || !need_parenthesis(feu._SYMBptr->feuille))
 	  return opstring+gen2tex(feu,contextptr) ;
 	return opstring+string("\\left(") + gen2tex(feu,contextptr) +string("\\right)");
-      }
-      if (mys.sommet==at_inv){
-        if (feu.is_symb_of_sommet(at_sin))
-          return string("\\csc\\left(") + gen2tex(feu._SYMBptr->feuille,contextptr) +string("\\right)");
-        if (feu.is_symb_of_sommet(at_cos))
-          return string("\\sec\\left(") + gen2tex(feu._SYMBptr->feuille,contextptr) +string("\\right)");
       }
       if (mys.sommet==at_inv && (feu.is_symb_of_sommet(at_prod) || feu.is_symb_of_sommet(at_plus) || feu.is_symb_of_sommet(at_pow) || feu.type<=_IDNT) ){
 	if (feu.type==_IDNT)
@@ -1363,25 +1347,12 @@ namespace giac {
 	return "\\sqrt{"+gen2tex(v.front(),contextptr)+"}";
       if ( v.back()==minus_one_half || v.back()==fraction(minus_one,plus_two) )
 	return "\\frac{1}{\\sqrt{"+gen2tex(v.front(),contextptr)+"}}";
-      if (v.front().type==_SYMB && v.front()._SYMBptr->sommet!=at_exp && equalposcomp(primitive_tab_op,v.front()._SYMBptr->sommet)){
-        string res=string("\\")+v.front()._SYMBptr->sommet.ptr()->s+"\\^{";
-        res += gen2tex(v.back(),contextptr);
-        res += "}";
-        gen v0=v.front()._SYMBptr->feuille;
-        bool par = (v0.type>=_CPLX || is_strictly_positive(-v0,contextptr) ) && v0.type!=_IDNT && !ckmatrix(v0);
-        string v0s=gen2tex(v0,contextptr);
-        if (par)
-          res +="\\left("+v0s+"\\right)";
-        else
-          res += v0s;
-        return res;
-      }
       string res=gen2tex(v.front(),contextptr);
       bool par = (v.front().type>=_CPLX || is_strictly_positive(-v.front(),contextptr) ) && v.front().type!=_IDNT && !ckmatrix(v.front());
       if (par && !v.front().is_symb_of_sommet(at_plus)){
 	int ress=int(res.size()),i;
 	for (i=1;i<ress;++i){
-	  if (res[i]<=32 || !my_isalpha(res[i]))
+	  if (res[i]<=32 || !isalpha(res[i]))
 	    break;
 	}
 	if (i+12<ress && res.substr(i,6)=="\\left(" && res.substr(ress-6,6)=="right)")
@@ -1427,6 +1398,11 @@ namespace giac {
     case _VECT:
       if (e.subtype==_SPREAD__VECT)
 	return spread2tex(*e._VECTptr,1,contextptr);
+      if (e.subtype==_GRAPH__VECT){
+	string s;
+	if (is_graphe(e,s,contextptr))
+	  return "\\mbox{"+s+'}';
+      }
       if (!e._VECTptr->empty() && e._VECTptr->back().is_symb_of_sommet(at_pnt) && !is3d(e._VECTptr->back()) )
 	return vectpnt2tex(e,contextptr);
       if (ckmatrix(*e._VECTptr))
@@ -1458,7 +1434,7 @@ namespace giac {
     }
     return 0;
   }
-#if defined USE_GMP_REPLACEMENTS || defined GIAC_GGB || defined EMCC || defined EMCC2 || defined KHICAS || defined NSPIRE_NEWLIB || defined GOODNOTES
+#if defined USE_GMP_REPLACEMENTS || defined GIAC_GGB || defined EMCC || defined EMCC2 || defined KHICAS || defined NSPIRE_NEWLIB
   bool has_improved_latex_export(const gen &g,string &s,bool override_texmacs,GIAC_CONTEXT){
     return false;
   }
@@ -1541,7 +1517,7 @@ namespace giac {
     else
       fprintf(file,"\\begin{pspicture}(%.4f,%.4f)(%.4f,%.4f)\n\\psset{unit=%.4fcm}\n\\psset{linewidth=.5pt}\n\\psset{arrowsize=2pt 4}\n", X1*xunit, Y1*xunit, X2*xunit, Y2*xunit,xunit);
     fprintf(file,"\\psset{linecolor=black}\n");
-#if !defined KHICAS && !defined SDL_KHICAS
+#ifndef KHICAS
     if (logo){
       // fprintf(file,"\\psframe[fillstyle=solid,fillcolor=gray](%.4f,%.4f)(%.4f,%.4f)\n",X1,Y1,X2,Y2);
       vector<logo_turtle> w=vecteur2turtlevect(v);

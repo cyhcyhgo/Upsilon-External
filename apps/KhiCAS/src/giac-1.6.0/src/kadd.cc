@@ -1,6 +1,6 @@
 #include "config.h"
 #include "giacPCH.h"
-#if defined KHICAS || defined SDL_KHICAS
+#ifdef KHICAS
 #include "kdisplay.h"
 #include <string.h>
 #include <stdio.h>
@@ -89,9 +89,6 @@ int ext_main(){
 }
 #else
 int ext_main(){
-  //tab16=(four_int *) malloc(sizeof(four_int)*8*32);
-  //tab24=(six_int*) malloc(sizeof(six_int)*8*32);
-  //tab48=(twelve_int*) malloc(sizeof(twelve_int)*8*32);
   caseval("*");
   return 0;
 }
@@ -99,47 +96,37 @@ int ext_main(){
 
 void handle_flash(GIAC_CONTEXT);
 
-#ifdef HP39
-const int C20=14;
-extern "C" int khicas_1bpp;
-unsigned short mmind_col[]={212,170,127,85,42,0};
-#else
-const int C20=20;
 unsigned short mmind_col[]={COLOR_BLUE,COLOR_RED,COLOR_MAGENTA,COLOR_GREEN,COLOR_CYAN,COLOR_YELLOW};
-#endif
 
-#ifndef NUMWORKS_SLOTB
 void mastermind_disp(const vector<int> & solution,const vector< vector<int> > & essais,const vector<int> & essai,bool fulldisp,GIAC_CONTEXT){
-  int x0=C20*3/2,y0=C20/2;
+  int x0=30,y0=30;
   if (fulldisp)
     drawRectangle(0,0,LCD_WIDTH_PX,LCD_HEIGHT_PX,_WHITE);
   else
-    drawRectangle(0,y0+6*C20,LCD_WIDTH_PX,LCD_HEIGHT_PX-(y0+4*C20),_WHITE);
+    drawRectangle(0,y0+6*20,LCD_WIDTH_PX,LCD_HEIGHT_PX-(y0+4*20),_WHITE);
   if (fulldisp){
     // grille
-    for (int i=y0;i<=y0+4*C20;i+=C20)
-      draw_line(x0,i,x0+12*C20,i,_BLACK);
-    for (int j=x0;j<=x0+12*C20;j+=C20)
-      draw_line(j,y0,j,y0+4*C20,_BLACK);
+    for (int i=y0;i<=y0+4*20;i+=20)
+      draw_line(x0,i,x0+12*20,i,_BLACK);
+    for (int j=x0;j<=x0+12*20;j+=20)
+      draw_line(j,y0,j,y0+4*20,_BLACK);
     // affichage des coups precedents et resultats
     for (int c=0;c<essais.size();++c){
       const vector<int> & essai=essais[c];
       for (int i=0;i<4;++i){
-        draw_filled_circle(x0+C20*c+C20/2,y0+C20*i+C20/2,C20/2,mmind_col[essai[i]],true,true,contextptr);
-        if (essai[i] % 2)
-          draw_line(x0+C20*c,y0+C20*i+C20/2,x0+C20*c+C20,y0+C20*i+C20/2,essai[i]>2?COLOR_WHITE:COLOR_BLACK);
+	draw_filled_circle(x0+20*c+10,y0+20*i+10,10,mmind_col[essai[i]],true,true,contextptr);
       }
       // resultats
       vector<int> S(solution),E(essai);
       // bien places
       int bien=0;
       for (int i=0;i<S.size();++i){
-        if (S[i]==E[i]){
-          ++bien;
-          S.erase(S.begin()+i);
-          E.erase(E.begin()+i);
-          --i;
-        }
+	if (S[i]==E[i]){
+	  ++bien;
+	  S.erase(S.begin()+i);
+	  E.erase(E.begin()+i);
+	  --i;
+	}
       }
       // mal places
       int mal=0;
@@ -147,55 +134,46 @@ void mastermind_disp(const vector<int> & solution,const vector< vector<int> > & 
       sort(E.begin(),E.end());
       int s=0,e=0;
       for (;;){
-        if (s>=S.size() || e>=E.size())
-          break;
-        if (S[s]==E[e]){
-          ++mal;
-          ++s; ++e;
-          continue;
-        }
-        if (S[s]<E[e])
-          ++s;
-        else
-          ++e;
+	if (s>=S.size() || e>=E.size())
+	  break;
+	if (S[s]==E[e]){
+	  ++mal;
+	  ++s; ++e;
+	  continue;
+	}
+	if (S[s]<E[e])
+	  ++s;
+	else
+	  ++e;
       }
       char buf[2]={0,0};
       buf[0]='0'+bien;
-      os_draw_string(x0+C20*c+3,y0+C20*4+2,COLOR_GREEN,_WHITE,buf);
+      os_draw_string(x0+20*c+3,y0+20*4+2,COLOR_GREEN,_WHITE,buf);
       buf[0]='0'+mal;
-      os_draw_string(x0+C20*c+3,y0+C20*5+2,COLOR_MAGENTA,_WHITE,buf);
+      os_draw_string(x0+20*c+3,y0+20*5+2,COLOR_MAGENTA,_WHITE,buf);
       //CERR << solution << " " << essai << " " << bien << " " << mal << endl;
     }
   }
-  os_draw_string(C20/2,y0+C20*4+2,COLOR_GREEN,_WHITE,"=");
-  os_draw_string(C20/2,y0+C20*5+2,COLOR_MAGENTA,_WHITE,"~");
-  int y=C20*13/2;
+  int y=170;
   int x=os_draw_string_small_(x0,y,"0");
-  draw_filled_circle(x+C20/2,y+C20/2,C20/2,mmind_col[0]);
+  draw_filled_circle(x+10,y+10,10,COLOR_BLUE);
   x=os_draw_string_small_(x+30,y,"1");
-  draw_filled_circle(x+C20/2,y+C20/2,C20/2,mmind_col[1]);
-  draw_line(x,y+C20/2,x+C20,y+C20/2,COLOR_BLACK);
+  draw_filled_circle(x+10,y+10,10,COLOR_RED);
   x=os_draw_string_small_(x+30,y,"2");
-  draw_filled_circle(x+C20/2,y+C20/2,C20/2,mmind_col[2]);
+  draw_filled_circle(x+10,y+10,10,COLOR_MAGENTA);
   x=os_draw_string_small_(x+30,y,"3");
-  draw_filled_circle(x+C20/2,y+C20/2,C20/2,mmind_col[3]);
-  draw_line(x,y+C20/2,x+C20,y+C20/2,COLOR_WHITE);
+  draw_filled_circle(x+10,y+10,10,COLOR_GREEN);
   x=os_draw_string_small_(x+30,y,"4");
-  draw_filled_circle(x+C20/2,y+C20/2,C20/2,mmind_col[4]);
+  draw_filled_circle(x+10,y+10,10,COLOR_CYAN);
   x=os_draw_string_small_(x+30,y,"5");
-  draw_filled_circle(x+C20/2,y+C20/2,C20/2,mmind_col[5]);
-  draw_line(x,y+C20/2,x+C20,y+C20/2,COLOR_WHITE);
-  y += C20;
+  draw_filled_circle(x+10,y+10,10,COLOR_YELLOW);
+  y += 20;
   // affichage du coup actuel
-  for (int i=0;i<essai.size();++i){
-    draw_filled_circle(C20/2,i*C20+y0+C20/2,C20/2,mmind_col[essai[i]],true,true,contextptr);
-    if (essai[i] % 2)
-      draw_line(0,i*C20+y0+C20/2,C20,i*C20+y0+C20/2,essai[i]>2?COLOR_WHITE:COLOR_BLACK);
-  }
-  // draw_filled_circle(x0+C20*i+C20/2,y+C20/2,C20/2,mmind_col[essai[i]],true,true,contextptr);
+  for (int i=0;i<essai.size();++i)
+    draw_filled_circle(x0+20*i+10,y+10,10,mmind_col[essai[i]],true,true,contextptr);
 }    
   
-int do_mastermind(GIAC_CONTEXT){
+int mastermind(GIAC_CONTEXT){
   // Mastermind
   vector<int> solution(4),essai;
   vector< vector<int> > essais;
@@ -220,321 +198,67 @@ int do_mastermind(GIAC_CONTEXT){
     }
     if (key>='0' && key<='5'){
       if (essai.size()==4)
-        continue;
+	continue;
       essai.push_back(key-'0');
     }
     if (key==KEY_CTRL_EXE || key==KEY_CTRL_OK){
       if (essai.size()==4){
-        if (essai==solution){
-          char buf[16]; giac::sprint_int(buf,essais.size());
-          confirm(lang!=1?"Solution found! Tries:":"Vous avez trouve. Essais:",buf);
-          return i;
-        }
-        fulldisp=true;
-        essais.push_back(essai);
-        essai.clear();
-        if (essais.size()==nbessais){
-          mastermind_disp(solution,essais,essai,true,contextptr);
-          for (int i=0;i<solution.size();++i)
-            draw_filled_circle(30+C20*i+C20/2,190+C20,C20/2,mmind_col[solution[i]],true,true,contextptr);
-          confirm(lang!=1?"Game over!":"Vous avez perdu.",lang!=1?"Solution was":"La solution etait",false,140);
-          return -1;
-        }
+	if (essai==solution){
+	  char buf[16]; sprint_int(buf,essais.size());
+	  confirm("Vous avez trouve. Essais:",buf);
+	  return i;
+	}
+	fulldisp=true;
+	essais.push_back(essai);
+	essai.clear();
+	if (essais.size()==nbessais){
+	  mastermind_disp(solution,essais,essai,true,contextptr);
+	  for (int i=0;i<solution.size();++i)
+	    draw_filled_circle(30+20*i+10,190+20,10,mmind_col[solution[i]],true,true,contextptr);
+	  confirm("Vous avez perdu.","La solution etait",false,140);
+	  return -1;
+	}
       }
     }
     if (key==KEY_CTRL_DEL){
       if (!essai.empty())
-        essai.pop_back();
+	essai.pop_back();
       continue;
     }
   }
   return 0;
 }
-#ifdef HP39
-int mastermind(GIAC_CONTEXT){
-  int k=khicas_1bpp;
-  khicas_1bpp=0;
-  os_fill_rect(0,0,LCD_WIDTH_PX,LCD_HEIGHT_PX,SDK_WHITE);
-  int r=do_mastermind(contextptr);
-  khicas_1bpp=k;
-  return r;
-}
-#else
-int mastermind(GIAC_CONTEXT){
-  return do_mastermind(contextptr);
-}
-#endif
 
-#endif // NUMWORKS_SLOTB
-
-
-// Newton iteration for polynomial
-// with simult Horner evaluation of p and p' at x
-complex<double> horner_newton(const vector<std::complex<double> > & p,const std::complex<double> &x){
-  complex<double> num,den;
-  vector<std::complex<double> >::const_iterator it=p.begin(),itend=p.end();
-  int n=itend-it-1; 
-  for (;n;--n,++it){
-    num *= x;
-    den *= x;
-    num += *it;
-    den += double(n)*(*it);
-  } // end for
-  // last step
-  num *= x;
-  num += *it;
-  return x-num/den;
-}
-
-complex<double> horner_newton(const vector<double> & p,const std::complex<double> &x){
-  vector<double>::const_iterator it=p.begin(),itend=p.end();
-  int n=itend-it-1; 
-  complex<double> num=*it*x+*(it+1),den=(double(n)*(*it))*x+double(n-1)*(*(it+1));
-  for (it+=2,n-=2;n;--n,++it){
-    num *= x;
-    den *= x;
-    num += *it;
-    den += double(n)*(*it);
-  } // end for
-  // last step
-  num *= x;
-  num += *it;
-  return x-num/den;
-}
-
-int do_fractale(GIAC_CONTEXT){
+int fractale(GIAC_CONTEXT){
   freeze=true;
-  int X=LCD_WIDTH_PX,
-#if 1 // def HP39
-    Y=LCD_HEIGHT_PX,
-#else
-    Y=LCD_HEIGHT_PX-18,
-#endif
-    Nmax=16,Nmaxmin=5,Nmaxmax=50;
-  bool mandel=do_confirm("EXE: Mandelbrot, Back: bassins racines");
-  vecteur P; vector<complex<double> > p,Z;
-  double np=0; complex<double> na;
-  // if the polynomial is x^np+a=0
-  // Newton iteration is x-(x^n+a)/(n*x^(n-1))=((n-1)*x-a)/(n*x^(n-1))
-  vector<double> pr;
-  bool real=true;
-  if (!mandel){ // Input Julia
-    string s;
-    inputline("Polynome (x^3-1)?","",s,false,65,contextptr);
-    if (s.empty()) s="x^3-1";
-    gen g(s,contextptr);
-    g=_symb2poly(g,contextptr);
-    if (g.type!=_VECT || g._VECTptr->size()<3 || g._VECTptr->size()>9){
-      do_confirm("Not a polynomial or degree<2 or degree>8");
-      return 0;
-    }
-    P=*g._VECTptr;
-    if (!convert(P,p,true)){
-      do_confirm("Unable to convert");
-      return 0;
-    }
-    // detect x^n+a==0
-    np=P.size()-1;
-    for (int i=1;i<p.size()-1;++i){
-      if (p[i]!=0){
-        np=0;
-        break;
+  int X=320,Y=222,Nmax=10;
+  double d=10;
+  if (inputdouble(lang?"Number of iterations? (default 10)":"Nombre d'iterations? (defaut 10)",d,contextptr) && d>=1 && d<=20)
+    Nmax=d;
+  double w=2.7/X;
+  double h=-1.87/Y;
+  for (int y=0;y<=Y/2;++y){
+    complex<double> c(-2.1,h*y+0.935);
+    for (int x=0;x<X;++x){
+      complex<double> z(0);
+      int j;
+      for (j=0;j<Nmax;++j){
+	z=z*z+c;
+	if (abs(z)>2)
+	  break;
       }
+      int color=126*j+2079;
+      os_set_pixel(x,y,color);
+      os_set_pixel(x,(Y-y),color);
+      c = c+w;
     }
-    if (np){
-      na=p.back()/p.front()/double(np);
-      np=(np-1)/np;
-    }
-    for (int i=0;i<p.size();++i){
-      if (p[i].imag()!=0){
-        real=false;
-        break;
-      }
-      pr.push_back(p[i].real());
-    }
-    gen R=_proot(P,contextptr);
-    if (R.type==_VECT && !convert(*R._VECTptr,Z,true)){
-      do_confirm("Unable to find polynomial roots");
-      return 0;
-    }
+    sync_screen();
   }
-  float xmin=-2.1,xmax=0.6,ymin=-0.935,ymax=0.935;
-  if (!mandel){
-    xmin=-1.35; xmax=1.35; 
-  }
-  while (1){
-    os_fill_rect(0,0,LCD_WIDTH_PX,LCD_HEIGHT_PX,COLOR_BLACK);
-    float w=(xmax-xmin)/X;
-    float h=(ymin-ymax)/Y;
-    bool sym=real && ymin<0 && ymax>0;
-    int Ysym=2*ymax/(ymax-ymin)*Y-1;
-    for (int y=0;y<Y;++y){
-      int ysym=Ysym-y; // symmetric pixel
-      if (mandel){
-        complex<float> c(xmin,h*y+ymax);
-        for (int x=0;x<X;++x){
-          int j=0;
-          complex<float> z(0);
-          for (j=0;j<Nmax;++j){
-            z*=z; z+=c;
-            if (norm(z)>4) // this is more efficient than abs(z)>2
-              break;
-          }
-#ifdef HP39
-          int color=(255*j)/Nmax;
-#else
-          int color=126*j+2079;
-#endif
-          os_set_pixel(x,y,color);
-          if (sym && ysym>0 && ysym<Y){
-            os_set_pixel(x,ysym,color);
-          }
-          c = c+w;
-        }
-      }
-      else {
-        complex<double> c(xmin,h*y+ymax);
-        for (int x=0;x<X;++x){
-          complex<double> z(c),zp;
-          int nrac=Z.size(),j;
-          // Newton iterations
-          for (j=0;j<Nmax;++j){
-            if (norm(z)>1e20)
-              break;
-            zp=z;
-            if (np){
-              z *=z ;
-              for (int i=3;i<P.size()-1;++i)
-                z *= zp;
-              z=np*zp-na/z;
-            }
-            else
-              z=real?horner_newton(pr,zp):horner_newton(p,zp);
-            if (norm(z-zp)<1e-8){
-              // find nearest root
-              for (int i=0;i<nrac;++i){
-                if (norm(z-Z[i])<1e-8){
-                  nrac=i;
-                  break;
-                }
-              }
-              break;
-            }
-          }
-          int color=0;
-          if (nrac<Z.size()){
-#ifdef HP39
-            color=int(255*(nrac+j/25.)/Z.size());
-#else
-            int r_,g_,b_; arc_en_ciel(25*nrac+j,r_,g_,b_);
-            color=(((r_*32)/256)<<11) | (((g_*64)/256)<<5) | (b_*32/256);
-#endif
-          }
-          os_set_pixel(x,y,color);	
-          if (sym && ysym>0 && ysym<Y){
-            if (nrac<Z.size()){
-              z=conj(Z[nrac]);
-              // find nearest root
-              for (int i=0;i<Z.size();++i){
-                if (norm(z-Z[i])<1e-8){
-                  nrac=i;
-                  break;
-                }
-              }
-#ifdef HP39
-              color=int(255*(nrac+j/25.)/Z.size());
-#else
-              int r_,g_,b_; arc_en_ciel(25*nrac+j,r_,g_,b_);
-              color=(((r_*32)/256)<<11) | (((g_*64)/256)<<5) | (b_*32/256);
-#endif
-            }
-            os_set_pixel(x,ysym,color);
-          }
-          c = c+double(w);	  
-        }
-      }
-      if (sym && (ysym==y || ysym==y-1))
-        y=2*y-1;
-      if (y%16==0) sync_screen();
-    }
-  lkey: 
-    statuslinemsg("Back: quit, +-: zoom, keypad: move, ml: iter");
-    int k=getkey(1);
-    if (k==KEY_CTRL_EXIT)
-      break;
-    float dx=xmax-xmin,dy=ymax-ymin;
-    if (k==KEY_CTRL_LEFT){
-      xmin -= dx/10;
-      xmax -= dx/10;
-      continue;
-    }
-    if (k==KEY_CTRL_RIGHT){
-      xmin += dx/10;
-      xmax += dx/10;
-      continue;
-    }
-    if (k==KEY_CTRL_DOWN){
-      ymin -= dy/10;
-      ymax -= dy/10;
-      continue;
-    }
-    if (k==KEY_CTRL_UP){
-      ymin += dy/10;
-      ymax += dy/10;
-      continue;
-    }
-    float xc=(xmin+xmax)/2,yc=(ymin+ymax)/2;
-    if (k=='-'){
-      dx *=1.5; dy*=1.5;
-      xmin = xc-dx/2;
-      xmax = xc+dx/2;
-      ymin = yc-dy/2;
-      ymax = yc+dy/2;
-      continue;
-    }
-    if (k=='+'){
-      dx /=1.5; dy/=1.5;
-      xmin = xc-dx/2;
-      xmax = xc+dx/2;
-      ymin = yc-dy/2;
-      ymax = yc+dy/2;
-      continue;
-    }
-    if ( (k=='l' || k=='<' || k==KEY_CHAR_ROOT) && Nmax>Nmaxmin){
-      --Nmax; continue;
-    }
-    if ( (k=='m' || k=='>' || k=='7' || k==KEY_CHAR_SQUARE) && Nmax<Nmaxmax){
-      ++Nmax; continue;
-    }
-    goto lkey;
-  }
+  statuslinemsg("Ecran fige. Taper EXIT");
+  getkey(1);
   return 0;
 }
-#ifdef HP39
-int fractale(GIAC_CONTEXT){
-  int k=khicas_1bpp;
-  khicas_1bpp=0;
-  os_fill_rect(0,0,LCD_WIDTH_PX,LCD_HEIGHT_PX,SDK_WHITE);
-  int r=do_fractale(contextptr);
-  khicas_1bpp=k;
-  return r;
-}
-#else
-int fractale(GIAC_CONTEXT){
-#if defined NUMWORKS_SLOTB && !defined NUMWORKS_SLOTBFR && !defined NUMWORKS_SLOTBEN
-  do_confirm("Not available in short version");
-  return 0;
-#endif
-  return do_fractale(contextptr);
-}
-#endif
 
-#if defined NUMWORKS_SLOTB
-int finance(int mode,GIAC_CONTEXT){ // mode==-1 pret, 1 placement
-  do_confirm("Not available in short version");
-  return 0;
-}
-#else
 int finance(int mode,GIAC_CONTEXT){ // mode==-1 pret, 1 placement
   static double pv=(-mode)*10000;
   static double fv=0;
@@ -551,10 +275,10 @@ int finance(int mode,GIAC_CONTEXT){ // mode==-1 pret, 1 placement
   // and add if (smallmenu.selection==app_number-1){ call your code }
   MenuItem smallmenuitems[smallmenu.numitems];      
   smallmenu.items=smallmenuitems;
-  smallmenu.height=MENUHEIGHT-1;
+  smallmenu.height=11;
   smallmenu.scrollbar=1;
   smallmenu.scrollout=1;
-  smallmenu.title = (char *) (lang==1?(mode==-1?"Pret bancaire":"Epargne"):(mode==-1?"Mortgage":"Savings"));
+  smallmenu.title = (char *) (mode==-1?"Pret bancaire":"Epargne");
   smallmenu.type = MENUTYPE_NO_NUMBER;
   while(1) {
     drawRectangle(0,0,LCD_WIDTH_PX,LCD_HEIGHT_PX,_WHITE);
@@ -581,11 +305,7 @@ int finance(int mode,GIAC_CONTEXT){ // mode==-1 pret, 1 placement
     for (int i=0;i<6;i++)
       smallmenuitems[i].text = tab[i];
     smallmenuitems[6].text = (char*)((lang==1)?"Quitter ":"Quit ");
-#ifdef HP39
-    os_draw_string_medium(0,114,solved?_BLACK:_WHITE,solved?_WHITE:_BLACK,"Ans solve|EXE change|Tool help");
-#else
     os_draw_string(0,200,solved?giac::_GREEN:giac::_MAGENTA,_WHITE,"Ans solve|EXE change|Tool help");
-#endif
     int sres = doMenu(&smallmenu);
     if (sres==MENU_RETURN_EXIT)
       break;
@@ -675,41 +395,30 @@ int finance(int mode,GIAC_CONTEXT){ // mode==-1 pret, 1 placement
   }
   return 0;
 }
-#endif
-
-int geoapp(GIAC_CONTEXT);
 
 int khicas_addins_menu(GIAC_CONTEXT){
   Menu smallmenu;
 #ifdef NUMWORKS
-  smallmenu.numitems=12; // INCREMENT IF YOU ADD AN APPLICATION
-#else
   smallmenu.numitems=11; // INCREMENT IF YOU ADD AN APPLICATION
+#else
+  smallmenu.numitems=10; // INCREMENT IF YOU ADD AN APPLICATION
 #endif  
   // and uncomment first smallmenuitems[app_number].text="Reserved"
   // replace by your application name
   // and add if (smallmenu.selection==app_number-1){ call your code }
   MenuItem smallmenuitems[smallmenu.numitems];      
   smallmenu.items=smallmenuitems;
-  smallmenu.height=MENUHEIGHT;
-  smallmenu.width=28;
-  //smallmenu.scrollbar=1;
+  smallmenu.height=12;
+  smallmenu.scrollbar=1;
   smallmenu.scrollout=1;
-  smallmenuitems[0].text = (char*)((lang==1)?"Geometrie":"Geometry");
-  smallmenuitems[1].text = (char*)((lang==1)?"Tableur":"Spreadsheet");
-  smallmenuitems[2].text = (char*)((lang==1)?"Table periodique":"Periodic table");
-  smallmenuitems[3].text = (char*)((lang==1)?"Pret":"Mortgage");
-  smallmenuitems[4].text = (char*)((lang==1)?"Epargne":"TVM");
-  smallmenuitems[5].text = (char*)((lang==1)?"Table caracteres":"Char table");
-#ifdef NUMWORKS_SLOTB
-  smallmenuitems[6].text = (char*)"Not in short version";
-  smallmenuitems[7].text = (char*)"Not in short version";
-  smallmenuitems[8].text = (char*)"Not in short version";
-#else
-  smallmenuitems[6].text = (char*)((lang==1)?"Exemple simple: Syracuse":"Simple example; Syracuse");
-  smallmenuitems[7].text = (char*)((lang==1)?"Exemple de jeu: Mastermind":"Game example: Mastermind");
-  smallmenuitems[8].text = (char*)((lang==1)?"Exemples de fractales":"Fractals examples");
-#endif
+  smallmenuitems[0].text = (char*)((lang==1)?"Tableur":"Spreadsheet");
+  smallmenuitems[1].text = (char*)((lang==1)?"Table periodique":"Periodic table");
+  smallmenuitems[2].text = (char*)((lang==1)?"Pret":"Mortgage");
+  smallmenuitems[3].text = (char*)((lang==1)?"Epargne":"TVM");
+  smallmenuitems[4].text = (char*)((lang==1)?"Table caracteres":"Char table");
+  smallmenuitems[5].text = (char*)((lang==1)?"Exemple simple: Syracuse":"Simple example; Syracuse");
+  smallmenuitems[6].text = (char*)((lang==1)?"Exemple de jeu: Mastermind":"Game example: Mastermind");
+  smallmenuitems[7].text = (char*)((lang==1)?"Fractale de Mandelbrot":"Mandelbrot fractal");
   // smallmenuitems[8].text = (char*)"Mon application"; // adjust numitem !
   // smallmenuitems[9].text = (char*)"Autre application";
   // smallmenuitems[10].text = (char*)"Encore une autre";
@@ -731,11 +440,9 @@ int khicas_addins_menu(GIAC_CONTEXT){
 	handle_flash(contextptr);
 #endif
       // Attention les entrees sont decalees de 1
-      if (smallmenu.selection==1) // geometry
-	geoapp(contextptr);
-      if (smallmenu.selection==2) // tableur
+      if (smallmenu.selection==1) // tableur
 	sheet(contextptr);
-      if (smallmenu.selection==3){ // table periodique
+      if (smallmenu.selection==2){ // table periodique
 	const char * name,*symbol;
 	char protons[32],nucleons[32],mass[32],electroneg[32];
 	int res=periodic_table(name,symbol,protons,nucleons,mass,electroneg);
@@ -772,28 +479,25 @@ int khicas_addins_menu(GIAC_CONTEXT){
 	  ptr=strcpy(ptr,electroneg+4)+strlen(ptr);
 	}
 	copy_clipboard(console_buf,true);
-        return KEY_CTRL_PASTE;        
 	// return Console_Input(console_buf);
       }
-      if (smallmenu.selection==4){
+      if (smallmenu.selection==3){
 	finance(-1,contextptr);
 	continue;
       }
-      if (smallmenu.selection==5){
+      if (smallmenu.selection==4){
 	finance(1,contextptr);
 	continue;
       }
-      if (smallmenu.selection==6){
+      if (smallmenu.selection==5){
 	int c=chartab();
 	if (c>=0){
 	  char buf[2]={c,0};
 	  copy_clipboard(buf,true);
-          return KEY_CTRL_PASTE;
 	}
 	break;
       }
-#ifndef NUMWORKS_SLOTB
-      if (smallmenu.selection==7){
+      if (smallmenu.selection==6){
 	// Exemple simple d'application tierce: la suite de Syracuse
 	// on entre la valeur de u0
 	double d; int i;
@@ -814,19 +518,17 @@ int khicas_addins_menu(GIAC_CONTEXT){
 	  v.push_back(i);
 	}
 	// representation graphique de la liste en appelant la commande Xcas listplot
-	displaygraph(_listplot(v,contextptr),symbolic(at_listplot,v),contextptr);
+	displaygraph(_listplot(v,contextptr),contextptr);
 	// copie vers presse-papier en l'affichant
 	copy_clipboard(gen(v).print(contextptr),true);
 	continue;
 	// on entre la liste en ligne de commande et on quitte
 	return Console_Input(gen(v).print(contextptr).c_str());
       }
-      if (smallmenu.selection==8) // mastermind, on ne quitte pas
-        mastermind(contextptr);
-      if (smallmenu.selection==9){
-        fractale(contextptr);
-      }
-#endif
+      if (smallmenu.selection==7) // mastermind, on ne quitte pas
+	mastermind(contextptr);
+      if (smallmenu.selection==8)
+	fractale(contextptr);
     } // end sres==menu_selection
     Console_Disp(1,contextptr);
     break;
@@ -840,10 +542,6 @@ int khicas_addins_menu(GIAC_CONTEXT){
 #ifdef NUMWORKS
 
 void flash_info(const char * buf,std::vector<fileinfo_t> &v,size_t & first_modif,bool modif,int initpos,GIAC_CONTEXT){
-  if (v.empty()){
-    do_confirm(lang==1?"Pas de fichier.":"No file found");
-    return;
-  }
   Menu smallmenu;
   smallmenu.numitems=v.size();
   MenuItem smallmenuitems[smallmenu.numitems];
@@ -878,7 +576,7 @@ void flash_info(const char * buf,std::vector<fileinfo_t> &v,size_t & first_modif
     }
     if (modif && sres == KEY_CTRL_CATALOG || sres==KEY_BOOK) { // rename
       string s=v[i].filename,msg1=(lang==1?"Renommer ":"Rename ")+s;
-      int j=inputline(msg1.c_str(),"",s,false,65,0);
+      int j=inputline(msg1.c_str(),"",s,false);
       if (j){
 	v[i].filename=s;
 	vs[i]=v[i].filename.c_str();
@@ -891,6 +589,10 @@ void flash_info(const char * buf,std::vector<fileinfo_t> &v,size_t & first_modif
     if (sres == MENU_RETURN_SELECTION  || sres==KEY_CTRL_EXE) {
       if (modif){
 	flash_synchronize(buf,v,&first_modif);
+#if defined NUMWORKS && !defined DEVICE
+	// debug
+	file_savetar("file.tar",(char *)buf,tar_totalsize(buf,0));
+#endif
 	break;
       }
       string msg1=vs[i];
@@ -917,7 +619,7 @@ void flash_info(const char * buf,std::vector<fileinfo_t> &v,size_t & first_modif
     }
     if (sres==KEY_CHAR_ANS){
       if (i>=0 && i<v.size()){
-	if (modif && (v[0].filename!="KhiCAS" || i>10)){
+	if (modif && i>10){
 	  smallmenuitems[i].value=!smallmenuitems[i].value;
 	  int m=v[i].mode;
 	  if (smallmenuitems[i].value)
@@ -951,36 +653,26 @@ void flash_info(const char * buf,size_t & first_modif,bool modif,GIAC_CONTEXT){
   flash_info(buf,v,first_modif,modif,initpos,contextptr);
 }
 
-extern "C" int filesize(const char *);
 // copy text file from ram scriptstore
-int flash_from_ram(const char * buf,const char * ext,size_t & first_modif,GIAC_CONTEXT){
+int flash_from_ram(const char * buf,size_t & first_modif,GIAC_CONTEXT){
   char filename[MAX_FILENAME_SIZE+1];
-  int n=giac_filebrowser(filename,ext,(lang==1?"Choisir fichier a copier":"Select file to copy"),0);
+  int n=giac_filebrowser(filename,"py",(lang==1?"Choisir fichier a copier":"Select file to copy"),0);
   if (n==0) return 0;
   const char * data=read_file(filename);
-#if defined DEVICE || defined NUMWORKS
-  int l=strlen(data);
-#else
-  int l=filesize(filename);
-#endif
-  if (l)
-    n=flash_adddata(buf,filename,data,l,0);
+  n=flash_adddata(buf,filename,data,strlen(data),0);
   return n;
 }
 
 void handle_flash(GIAC_CONTEXT){
-#if 0 // def NUMWORKS_SLOTB
-  return ; // disabled to save roomX
-#endif
-  const char flash_fr[]="Application de sauvegarde et gestion des scripts en memoire flash. Necessite 70K de memoire libre (a lancer tout de suite apres avoir ouvert KhiCAS). Attention a l'usure de la flash: utiliser avec parcimonie! Ne pas vider la corbeille avant que cela ne soit necessaire (ainsi les nouveaux fichiers s'ecriront sur d'autres secteurs). L'auteur decline toute responsabilite en cas d'usure prematuree de votre memoire flash.";
-  const char flash_en[]="This app lets you save and handle scripts in flash memory. Requires 70K of free RAM (run it immediatly after launching KhiCAS). In order to avoid premature wear of your flash, run this app only when required. Don't empty the trash unless it's necessary (that way new files will be written in other sectors). The author declines all responsability in the event of premature wear of your flash memory.";
+  const char flash_fr[]="Cette application, disponible hors mode examen, permet de sauvegarder et gerer des scripts en memoire flash. Elle a besoin de 70K de memoire RAM, lancez-la tout de suite apres avoir ouvert KhiCAS.\nPour eviter une usure trop rapide de la flash, il est conseille de l'utiliser le moins souvent possible et de ne pas vider la corbeille avant que cela ne soit necessaire (ainsi les nouveaux fichiers s'ecriront sur d'autres secteurs).\nL'auteur decline toute responsabilite en cas d'usure prematuree de votre memoire flash.";
+  const char flash_en[]="This app (not available if exam mode is on) lets you save and handle scripts in flash memory. It requires 70K of free RAM, you should run it immediatly after launching KhiCAS.\nIn order to avoid premature wear of your flash, run this app only when required. Don't empty the trash unless it's necessary (that way new files will be written in other sectors).\nThe author declines all responsability in the event of premature wear of your flash memory.";
   textArea text;
   text.editable=false;
   text.clipline=-1;
   text.title =(lang==1)?"EXIT: annuler, EXE: ok":"EXIT: cancel, EXE: run";
   add(&text,(lang==1)?flash_fr:flash_en);
   int key=doTextArea(&text,contextptr);
-  if ( (key!=1 && key!=KEY_CTRL_EXE && key!=KEY_CTRL_OK)
+  if (key!=1
 #ifdef DEVICE
       || inexammode()
 #endif
@@ -992,31 +684,22 @@ void handle_flash(GIAC_CONTEXT){
     confirm(lang==1?"Pas assez de memoire RAM.":"RAM Memory full",lang==1?"Purgez et relancez KhiCAS":"Purge and restart KhiCAS");    
     return;
   }
-#ifndef DEVICE
+#ifndef NUMWORKS
   char * freeptr=0;
   const char * flash_buf=file_gettar_aligned("apps.tar",freeptr);
 #endif
-  // skip user apps
-  while (numworks_maxtarsize>0 && (
-                                   ((unsigned char) *flash_buf)==0xba ||
-                                   ((unsigned char) flash_buf[1])==0xbe)
-         ){
-    flash_buf += 0x10000;
-    numworks_maxtarsize -= 0x10000;
-  }
   Menu smallmenu;
-  smallmenu.numitems=6;
+  smallmenu.numitems=5;
   MenuItem smallmenuitems[smallmenu.numitems];
   smallmenu.items=smallmenuitems;
   smallmenu.height=12;
   smallmenu.scrollbar=1;
   smallmenu.scrollout=1;
   smallmenuitems[0].text = (char*)(lang==1?"Informations flash":"Flash informations");
-  smallmenuitems[1].text = (char*)(lang==1?"KhiCAS RAM->flash":"KhiCAS RAM->flash");
-  smallmenuitems[2].text = (char*)(lang==1?"Python RAM->flash":"Python RAM->flash");
-  smallmenuitems[3].text = (char*)(lang==1?"Modifier infos fichiers":"Modify file infos");
-  smallmenuitems[4].text = (char*)(lang==1?"Vider la corbeille":"Empty trash");
-  smallmenuitems[5].text = (char*)(lang==1?"Quitter":"Leave");
+  smallmenuitems[1].text = (char*)(lang==1?"Copier RAM->flash":"Copy RAM->flash");
+  smallmenuitems[2].text = (char*)(lang==1?"Modifier infos fichiers":"Modify file infos");
+  smallmenuitems[3].text = (char*)(lang==1?"Vider la corbeille":"Empty trash");
+  smallmenuitems[4].text = (char*)(lang==1?"Quitter":"Leave");
   while (1){
     size_t first_modif=tar_totalsize(flash_buf,numworks_maxtarsize);
     string title=(lang==1?"Flash libre ":"Free flash ");
@@ -1025,25 +708,17 @@ void handle_flash(GIAC_CONTEXT){
     smallmenu.selection = 1;
     int sres = doMenu(&smallmenu);
     if (sres==MENU_RETURN_EXIT){
-#if defined NUMWORKS && !defined DEVICE
-      if (do_confirm(lang==1?"Quitter sans synchroniser?":"Leave without synchronization"))
-#endif
-        break;
+      break;
     } 
     if (sres == MENU_RETURN_SELECTION  || sres==KEY_CTRL_EXE) {
-      if (smallmenu.selection == smallmenu.numitems){
-#if defined NUMWORKS && !defined DEVICE
-        if (do_confirm(lang==1?"Synchroniser apps.tar?":"Synchronize apps.tar?"))
-          file_savetar("apps.tar",(char *)flash_buf,tar_totalsize(flash_buf,0));
-#endif
+      if (smallmenu.selection == smallmenu.numitems)
 	break;
-      }
       if (smallmenu.selection == 1){
 	flash_info(flash_buf,first_modif,false,contextptr); // info only, no erase
 	continue;
       }
-      if (smallmenu.selection==2 || smallmenu.selection==3){
-	if (flash_from_ram(flash_buf,smallmenu.selection==3?"py":"xw",first_modif,contextptr)){
+      if (smallmenu.selection == 2){
+	if (flash_from_ram(flash_buf,first_modif,contextptr)){
 	  // uncheck files having the same filename
 	  std::vector<fileinfo_t> v=tar_fileinfo(flash_buf,0);
 	  int n=v.size();
@@ -1065,11 +740,11 @@ void handle_flash(GIAC_CONTEXT){
 	}
 	continue;
       }
-      if (smallmenu.selection == 4){
+      if (smallmenu.selection == 3){
 	flash_info(flash_buf,first_modif,true,contextptr); // erase files
 	continue;
       }
-      if (smallmenu.selection==5){
+      if (smallmenu.selection==4){
 	if (numworks_maxtarsize-first_modif>65536 && do_confirm(lang==1?"Il reste de la place, etes-vous sur?":"There's still room, are you sure?"))
 	  flash_emptytrash(flash_buf,&first_modif);
       }
@@ -1089,13 +764,8 @@ void handle_flash(GIAC_CONTEXT){
 /* **************************
    * SPREADSHEET CODE       *
    ************************** */
-#ifdef HP39
-const int row_height=15;
-const int col_width=45;
-#else
 const int row_height=20;
 const int col_width=60;
-#endif
 string printcell(int i,int j){
   string s="";
   s+=('A'+j);
@@ -1226,22 +896,13 @@ bool sheet_display(tableur &t,GIAC_CONTEXT){
 	  drawRectangle(x+1,y,col_width+4,row_height,color_gris);	  
 	s=(*vj._VECTptr)[1].print(contextptr);
 	int dx=os_draw_string(0,0,0,0,s.c_str(),true); // find width
-	if (dx<col_width){
-#ifdef HP39
-	  os_draw_string(x+2,y,rev?_WHITE:_BLACK,rev?_BLACK:_WHITE,s.c_str(),false); // draw
-#else
+	if (dx<col_width)
 	  os_draw_string(x+2,y,_BLACK,rev?color_gris:_WHITE,s.c_str(),false); // draw
-#endif
-  }
 	else {
 	  if (iscur && !has_sel && t.cmd_row<0)
 	    statuslinemsg(s.c_str());
 	  s=s.substr(0,8)+"...";
-#ifdef HP39
-	  os_draw_string_small(x+2,y,rev?_WHITE:_BLACK,rev?_BLACK:_WHITE,s.c_str(),false); // draw
-#else    
 	  os_draw_string_small(x+2,y,_BLACK,rev?color_gris:_WHITE,s.c_str(),false); // draw
-#endif
 	}
       }
       x+=col_width+4;
@@ -1260,11 +921,7 @@ bool sheet_display(tableur &t,GIAC_CONTEXT){
   bool small=t.keytooltip || dx>=LCD_WIDTH_PX-50;
   int sheety=LCD_HEIGHT_PX-2*row_height,xtooltip=0;
   if (t.cmd_row>=0 && t.cmd_pos>=0 && t.cmd_pos<=s.size()){
-#ifdef HP39
-    xend=os_draw_string(xend,sheety,_BLACK,_WHITE,printcell(t.cmd_row,t.cmd_col).c_str())+5;
-#else
     xend=os_draw_string(xend,sheety,_BLUE,_WHITE,printcell(t.cmd_row,t.cmd_col).c_str())+5;
-#endif
     string s1=s.substr(0,t.cmd_pos);
 #if 1
     xtooltip=xend=print_color(xend,sheety,s1.c_str(),_BLACK,false,small,contextptr);
@@ -1279,19 +936,11 @@ bool sheet_display(tableur &t,GIAC_CONTEXT){
     s=s.substr(t.cmd_pos,s.size()-t.cmd_pos);
     if (has_sel){
       s1=printsel(sel_r,sel_c,sel_R,sel_C);
-#ifdef HP39
-      xend=os_draw_string_small(xend,sheety,_BLACK,_WHITE,s1.c_str(),false);
-#else
       xend=os_draw_string_small(xend,sheety,_BLACK,color_gris,s1.c_str(),false);
-#endif
     }
     else {
       if (t.cmd_row!=t.cur_row || t.cmd_col!=t.cur_col)
-#ifdef HP39
-        xend=os_draw_string_small(xend,sheety,_BLACK,_WHITE,printcell(t.cur_row,t.cur_col).c_str(),false);
-#else
-        xend=os_draw_string_small(xend,sheety,_BLACK,color_gris,printcell(t.cur_row,t.cur_col).c_str(),false);
-#endif
+	xend=os_draw_string_small(xend,sheety,_BLACK,color_gris,printcell(t.cur_row,t.cur_col).c_str(),false);
     }
   } // end cmdline active
   else
@@ -1309,16 +958,10 @@ bool sheet_display(tableur &t,GIAC_CONTEXT){
     t.keytooltip=tooltip(xtooltip,sheety,t.cmd_pos,t.cmdline.c_str(),contextptr);
   python_compat(p,contextptr); xcas_python_eval=xpe;
   // fast menus
-#ifdef HP39
-  string menu("stat1d |stat2d | seq | edit| view | graph  ");
-  drawRectangle(0,114,LCD_WIDTH_PX,14,bg);
-  os_draw_string_small(0,114,_WHITE,_BLACK,menu.c_str());
-#else
   string menu("shift-1 stat1d|2 2d|3 seq|4 edit|5 view|6 graph|7 R|8 list| ");
   bg=65039;// bg=52832;
   drawRectangle(0,205,LCD_WIDTH_PX,17,bg);
   os_draw_string_small(0,205,_BLACK,bg,menu.c_str());
-#endif
   return true;
 }
 
@@ -1515,7 +1158,7 @@ void sheet_graph(tableur &t,GIAC_CONTEXT){
   vecteur v;
   sheet_pnt(t.m,v);
   gen g(v);
-  check_do_graph(g,0,2,contextptr);
+  check_do_graph(g,2,contextptr);
 }
 
 int sheet_menu_menu(tableur & t,GIAC_CONTEXT){
@@ -1800,8 +1443,6 @@ giac::gen sheet(GIAC_CONTEXT){
   if (!sheetptr)
     sheetptr=new_tableur(contextptr);
   tableur & t=*sheetptr;
-  sheet_eval(t,contextptr,true);
-  t.changed=false;
   bool status_freeze=false;
   t.keytooltip=false;
   for (;;){
@@ -1821,14 +1462,14 @@ giac::gen sheet(GIAC_CONTEXT){
     if (t.keytooltip){
       t.keytooltip=false;
       if (key==KEY_CTRL_EXIT)
-        continue;
+	continue;
       if (key==KEY_CTRL_RIGHT && t.cmd_pos==t.cmdline.size())
-        key=KEY_CTRL_OK;
+	key=KEY_CTRL_OK;
       if (key==KEY_CTRL_DOWN || key==KEY_CTRL_VARS)
-        key=KEY_BOOK;
-      if (key==KEY_CTRL_EXE || key==KEY_CTRL_OK || key==KEY_CHAR_ANS){
-        sheet_help_insert(t,key,contextptr);
-        continue;
+	key=KEY_BOOK;
+      if (key==KEY_CTRL_OK || key==KEY_CHAR_ANS){
+	sheet_help_insert(t,key,contextptr);
+	continue;
       }
     }
     status_freeze=false;
@@ -2032,9 +1673,8 @@ giac::gen sheet(GIAC_CONTEXT){
     case KEY_CTRL_R:
       copy_right(t,contextptr);
       continue;
-    case KEY_CTRL_CATALOG:
 #endif
-    case KEY_BOOK: case '\t':
+    case KEY_CTRL_CATALOG: case KEY_BOOK: case '\t':
       {
 	if (t.cmd_pos>=0)
 	  sheet_help_insert(t,0,contextptr);
@@ -2044,7 +1684,7 @@ giac::gen sheet(GIAC_CONTEXT){
     if ( (key >= KEY_CTRL_F1 && key <= KEY_CTRL_F6) ||
 	  (key >= KEY_CTRL_F7 && key <= KEY_CTRL_F14) 
 	 ){
-      const char tmenu[]= "F1 stat1d\nsum(\nmean(\nstddev(\nmedian(\nhistogram(\nbarplot(\nboxwhisker(\nF2 stat2d\nlinear_regression_plot(\nlogarithmic_regression_plot(\nexponential_regression_plot(\npower_regression_plot(\npolynomial_regression_plot(\nsin_regression_plot(\nscatterplot(\npolygonscatterplot(\nF3 seq\nrange(\nseq(\ntableseq(\nplotseq(\ntablefunc(\nrandvector(\nrandmatrix(\nF4 edt\n$\n:\nedit_cell\nundo\ncopy_down\ncopy_right\ninsert_row\ninsert_col\nF6 graph\nreserved\nF= poly\nproot(\npcoeff(\nquo(\nrem(\ngcd(\negcd(\nresultant(\nGF(\nF: arit\nF9 mod \nirem(\nifactor(\ngcd(\nisprime(\nnextprime(\npowmod(\niegcd(\nF8 list\nmakelist(\nrange(\nseq(\nlen(\nappend(\nranv(\nsort(\napply(\nF; plot\nplot(\nplotseq(\nplotlist(\nplotparam(\nplotpolar(\nplotfield(\nhistogram(\nbarplot(\nF7 real\nexact(\napprox(\nfloor(\nceil(\nround(\nsign(\nmax(\nmin(\nF< prog\n:\n&\n#\nhexprint(\nbinprint(\nf(x):=\ndebug(\npython(\nF> cplx\nabs(\narg(\nre(\nim(\nconj(\ncsolve(\ncfactor(\ncpartfrac(\nF= misc\n!\nrand(\nbinomial(\nnormald(\nexponentiald(\n\\\n % \n\n";
+      const char tmenu[]= "F1 stat1d\nsum(\nmean(\nstddev(\nmedian(\nhistogram(\nbarplot(\nboxwhisker(\nF2 stat2d\nlinear_regression_plot(\nlogarithmic_regression_plot(\nexponential_regression_plot(\npower_regression_plot(\npolynomial_regression_plot(\nsin_regression_plot(\nscatterplot(\npolygonscatterplot(\nF3 seq\nrange(\nseq(\ntableseq(\nplotseq(\ntablefunc(\nrandvector(\nrandmatrix(\nF4 edt\n$\n:\nedit_cell\nundo\ncopy_down\ncopy_right\ninsert_row\ninsert_col\nF6 graph\nreserved\nF= poly\nproot(\npcoeff(\nquo(\nrem(\ngcd(\negcd(\nresultant(\nGF(\nF: arit\n mod \nirem(\nifactor(\ngcd(\nisprime(\nnextprime(\npowmod(\niegcd(\nF8 list\nmakelist(\nrange(\nseq(\nlen(\nappend(\nranv(\nsort(\napply(\nF; plot\nplot(\nplotseq(\nplotlist(\nplotparam(\nplotpolar(\nplotfield(\nhistogram(\nbarplot(\nF7 real\nexact(\napprox(\nfloor(\nceil(\nround(\nsign(\nmax(\nmin(\nF< prog\n:\n&\n#\nhexprint(\nbinprint(\nf(x):=\ndebug(\npython(\nF> cplx\nabs(\narg(\nre(\nim(\nconj(\ncsolve(\ncfactor(\ncpartfrac(\nF= misc\n!\nrand(\nbinomial(\nnormald(\nexponentiald(\n\\\n % \n\n";
       const char * s=console_menu(key,(char *)tmenu,0);
       if (s && strlen(s)){
 	if (strcmp(s,"undo")==0){
@@ -2146,57 +1786,5 @@ giac::gen sheet(GIAC_CONTEXT){
   }
 }
 
-int geoapp(GIAC_CONTEXT){
-  int res=newgeo(contextptr);
-  if (res<0) return res;
-  // load a figure?
-  textArea * text=geoptr->hp;
-  vector<string> fign,figs;
-  vecteur V(gen2vecteur(giac::_VARS(0,contextptr)));
-  for (int i=0;i<V.size();++i){
-    gen tmp(V[i]);
-    gen val=eval(tmp,1,contextptr);
-    if (val.type==_VECT && val._VECTptr->size()==2 && val._VECTptr->front()==at_pnt){
-      vecteur & v=*val._VECTptr;
-      if (v[1].type==_STRNG){
-	fign.push_back(tmp.print(contextptr));
-	figs.push_back(*v[1]._STRNGptr);
-      }
-    }
-  }
-  if (1 || !figs.empty()){
-    if (0 && figs.size()==1){
-      text->elements.clear();
-      add(text,figs[0]);
-      text->filename=fign[0];
-    }
-    else {
-      const char * tab[figs.size()+3];
-      for (int i=0;i<figs.size();++i)
-	tab[i]=fign[i].c_str();
-      tab[figs.size()]=lang==1?"Nouvelle figure 2d":"New 2d figure";
-      tab[figs.size()+1]=lang==1?"Nouvelle figure 3d":"New 3d figure";
-      tab[figs.size()+2]=0;
-      int s=select_item(tab,lang==1?"Choisir figure":"Choose figure",true);
-      if (s>=0 && s<sizeof(tab)/sizeof(char *) && tab[s]){
-	text->elements.clear();
-	if (s<figs.size()){
-	  add(text,figs[s]);
-	  text->filename=fign[s]+".py";
-	  geoparse(text,contextptr);
-	}
-	else {
-	  geoptr->plot_instructions.clear();
-	  geoptr->symbolic_instructions.clear();
-	  geoptr->is3d=(s==figs.size()+1);
-	  geoptr->update_rotation();
-	  geoptr->orthonormalize();
-	  text->filename="figure"+print_INT_(figs.size()+1)+".py";
-	}
-      }
-      else return -3;
-    }
-  }
-  return geoloop(geoptr);
-}
+
 #endif

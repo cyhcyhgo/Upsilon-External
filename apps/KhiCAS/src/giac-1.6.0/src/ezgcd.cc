@@ -282,23 +282,6 @@ namespace giac {
 
   gen _coeff(const gen &,GIAC_CONTEXT);
 
-  polynome divbylgcd(const polynome &p){
-    polynome other(lgcd(p)),rem(p.dim),quo(p.dim);
-    if (!divrem1(p,other,quo,rem)){
-      if (!divrem1(p,other,quo,rem,false,true)){
-	CERR << "try_hensel_lift_factor bug \n";
-	return p;
-      }
-      else {
-	gen den=1; lcmdeno(quo,den);
-	quo=den*quo;
-	return quo;
-      }
-    }
-    else
-      return quo;
-  }
-
   bool try_sparse_factor(const polynome & pcur,const factorization & v,int mult,factorization & f){
     /* Try sparse factorization 
        lcoeff(pcur,x1)^#factors-1 * pcur = product_#factors P_i
@@ -399,7 +382,7 @@ namespace giac {
 
 	return false;
       const polynome & N=*num._POLYptr;
-      f.push_back(facteur<polynome>(divbylgcd(N),mult));
+      f.push_back(facteur<polynome>(N/lgcd(N),mult));
     }
     return true;
   }
@@ -931,8 +914,7 @@ namespace giac {
 	for (int i=1;i<s;++i){
 	  temp = temp * lcoeffs[i];
 	}
-        polynome quo(temp.dim), rem(temp.dim);
-	temp.TDivRem(lcp,quo,rem); temp=quo; // temp = temp / lcp;
+	temp = temp / lcp;
 	pcur_adjusted = pcur_adjusted * temp;
       }
       else {
@@ -1023,7 +1005,7 @@ namespace giac {
 	    }
 	    if (deg==Total){
 	      for (int i=0;i<s;++i){
-		f.push_back(facteur<polynome>(divbylgcd(P[i]),mult));
+		f.push_back(facteur<polynome>(P[i]/lgcd(P[i]),mult));
 	      }
 	      return true;
 	    }
@@ -1076,7 +1058,7 @@ namespace giac {
 	  }
 	  if (deg==Total){
 	    for (int i=0;i<s;++i){
-	      f.push_back(facteur<polynome>(divbylgcd(P[i]),mult));
+	      f.push_back(facteur<polynome>(P[i]/lgcd(P[i]),mult));
 	    }
 	    return true;
 	  }
@@ -1118,7 +1100,7 @@ namespace giac {
 	if (divrem1(pcur_adjusted,prodP,quo,rem,1) && rem.coord.empty()){
 	  // factor found
 	  pcur_adjusted=quo;
-	  f.push_back(facteur<polynome>(divbylgcd(prodP),mult));
+	  f.push_back(facteur<polynome>(prodP/lgcd(prodP),mult));
 	  for (int i=k-1;i>=0;--i){
 	    P.erase(P.begin()+test[i]);
 	  }

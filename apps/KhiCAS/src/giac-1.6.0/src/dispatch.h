@@ -262,7 +262,6 @@ namespace giac {
     _TABLE__VECT=30,
     _GRAPH__VECT =31,
     _PRG__VECT=32,
-    _REALSET__VECT=33,
   } ;
 
   enum symb_subtypes {
@@ -477,10 +476,10 @@ namespace giac {
   };
 
   enum color_values {
-#if defined KHICAS || defined SDL_KHICAS || defined GIAC_HAS_STO_38
+#ifdef KHICAS
     _BLACK=0,
     _RED=0xf800,
-    _GREEN=0x07e0,
+    _GREEN=0x0400,
     _YELLOW=0xffe0,
     _BLUE=0x001f,
     _MAGENTA=0xf81f,
@@ -489,45 +488,21 @@ namespace giac {
 #else // KHICAS
 #ifdef GIAC_HAS_STO_38
     _WHITE=0,
-    _RED=0xff0000,
-    _GREEN=0xff00,
-    _YELLOW=0xffff00,
-    _BLUE=0xff,
-    _MAGENTA=0xff00ff,
-    _CYAN=0xffff,
-    _BLACK=7,
 #else
     _BLACK=0,
+#endif
     _RED=1,
     _GREEN=2,
     _YELLOW=3,
     _BLUE=4,
     _MAGENTA=5,
     _CYAN=6,
+#ifdef GIAC_HAS_STO_38
+    _BLACK=7,
+#else
     _WHITE=7,
 #endif
 #endif // KHICAS
-#ifdef TICE
-    _POINT_LOSANGE= 0,
-    _POINT_PLUS = 0,
-    _POINT_INVISIBLE = 0,
-    _POINT_CARRE = 0,
-    _POINT_TRIANGLE = 0,
-    _POINT_ETOILE = 0,
-    _POINT_POINT = 0,
-    _FILL_POLYGON = 1<<22,
-    _QUADRANT1 = 0,
-    _QUADRANT2 = 0,
-    _QUADRANT3 = 0,
-    _QUADRANT4 = 0,
-    _DASH_LINE = 0,
-    _DOT_LINE = 0,
-    _DASHDOT_LINE = 0,
-    _DASHDOTDOT_LINE = 0,
-    _CAP_FLAT_LINE = 0,
-    _CAP_ROUND_LINE = 0,
-    _CAP_SQUARE_LINE = 0,
-#else
     _POINT_LOSANGE= 1 << 25,
     _POINT_PLUS = 1 << 26,
     _POINT_INVISIBLE = 1 << 27,
@@ -547,7 +522,6 @@ namespace giac {
     _CAP_FLAT_LINE = 5 << 22,
     _CAP_ROUND_LINE = 6 << 22,
     _CAP_SQUARE_LINE = 7 << 22,
-#endif
     _LINE_WIDTH_1 = 0,
     _LINE_WIDTH_2 = 1 << 16,
     _LINE_WIDTH_3 = 2 << 16,
@@ -567,11 +541,7 @@ namespace giac {
 #ifdef BESTA_OS
 #pragma diag_suppress 61
 #endif
-#ifdef TICE
-    _HIDDEN_NAME = 1 << 23,
-#else
-    _HIDDEN_NAME = 1 << 31,
-#endif
+    _HIDDEN_NAME = 1 << 31
   };
 
   enum maple_libs {
@@ -648,18 +618,6 @@ namespace giac {
     _GT_ACYCLIC = 159,             // acyclic
     _KDE_BANDWIDTH = 160,          // bandwidth
     _KDE_BINS = 161,               // bins
-    _NLP_METHOD = 162,
-    _NLP_TOLERANCE = 163,
-    _NLP_VERBOSE = 164,
-    _ANN_HALF_MSE = 165,           // MSE
-    _ANN_CROSS_ENTROPY = 166,      // cross_entropy
-    _ANN_LOG_LOSS = 167,           // log_loss
-    _ANN_BLOCK_SIZE = 168,         // block_size
-    _ANN_MOMENTUM = 169,           // momentum
-    _ANN_TOPOLOGY = 170,            // topology
-    _ANN_LEARNING_RATE = 171,      // learning_rate
-    _ANN_WEIGHT_DECAY = 172,       // weight_decay
-    _ANN_RELU = 173,               // ReLU
   };
 
   enum mupad_operator {

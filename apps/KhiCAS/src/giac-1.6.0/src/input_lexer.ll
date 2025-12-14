@@ -90,8 +90,8 @@
 #include "permu.h"
 #include "input_parser.h"    
 
-#if defined(RTOS_THREADX) || (defined(__MINGW_H) && !defined(KHICAS)) || defined NSPIRE || defined MS_SMART || defined(FREERTOS)
-  extern "C" int isatty (int ){ return 0; }
+#if defined(RTOS_THREADX) || defined(__MINGW_H) || defined NSPIRE || defined MS_SMART || defined(FREERTOS)
+  int isatty (int ){ return 0; }
 #endif
 
 #if defined BESTA_OS || defined(FREERTOS)
@@ -397,7 +397,6 @@ AN	[0-9a-zA-Z_~ ?\200-\355\357-\376]
 "folder["      (*yylval) = _FOLDER__VECT; return T_VECT_DISPATCH;
 "polyedre["      (*yylval) = _POLYEDRE__VECT; return T_VECT_DISPATCH;
 "rgba["      (*yylval) = _RGBA__VECT; return T_VECT_DISPATCH;
-"realset["      (*yylval) = _REALSET__VECT; return T_VECT_DISPATCH;
 "â¦" index_status(yyextra)=0; (*yylval) = _LIST__VECT; return T_VECT_DISPATCH;
 "â¦" index_status(yyextra)=1; return T_VECT_END;
 "<"                     index_status(yyextra)=0; (*yylval)=gen(at_inferieur_strict,2);  return T_TEST_EQUAL;
@@ -490,7 +489,6 @@ AN	[0-9a-zA-Z_~ ?\200-\355\357-\376]
 "&&"                    index_status(yyextra)=0; (*yylval)=gen(at_and,2); return T_AND_OP;
 "&amp;&amp;"                    index_status(yyextra)=0; (*yylval)=gen(at_and,2); return T_AND_OP;
 "AND"                   index_status(yyextra)=0; (*yylval)=gen(at_and,2); return T_AND_OP;
-"∧"                   index_status(yyextra)=0; (*yylval)=gen(at_and,2); return T_AND_OP;
 "'&&'"                  index_status(yyextra)=0; (*yylval)=gen(at_and,2); return T_QUOTED_BINARY;
 "'and'"                 index_status(yyextra)=0; (*yylval)=gen(at_and,2); return T_QUOTED_BINARY;
 "_and"                 index_status(yyextra)=0; (*yylval)=gen(at_and,2); return T_QUOTED_BINARY;
@@ -500,21 +498,12 @@ AN	[0-9a-zA-Z_~ ?\200-\355\357-\376]
 "'or'"                  index_status(yyextra)=0; (*yylval)=gen(at_ou,2); return T_QUOTED_BINARY;
 "_or"                  index_status(yyextra)=0; (*yylval)=gen(at_ou,2); return T_QUOTED_BINARY;
 "OR"                    index_status(yyextra)=0; (*yylval)=gen(at_ou,2); return T_AND_OP;
-"∨"                    index_status(yyextra)=0; (*yylval)=gen(at_ou,2); return T_AND_OP;
 "^^"                    index_status(yyextra)=0; (*yylval)=gen(at_bitxor,2); return T_AND_OP;
 "xor"                    index_status(yyextra)=0; (*yylval)=gen(at_xor,2); return T_AND_OP;
-"⊻"                    index_status(yyextra)=0; (*yylval)=gen(at_xor,2); return T_AND_OP;
 "_xor"                  index_status(yyextra)=0; (*yylval)=gen(at_xor,2); return T_QUOTED_BINARY;
 "'xor'"                  index_status(yyextra)=0; (*yylval)=gen(at_xor,2); return T_QUOTED_BINARY;
 "XOR"                    index_status(yyextra)=0; (*yylval)=gen(at_xor,2); return T_AND_OP;
-"∪"                      index_status(yyextra)=0; (*yylval)=gen(at_union,2); return T_AND_OP;
-"∩"                      index_status(yyextra)=0; (*yylval)=gen(at_intersect,2); return T_AND_OP;
-"Δ"                      index_status(yyextra)=0; (*yylval)=gen(at_symmetric_difference,2); return T_AND_OP;
-"∁"                     if (index_status(yyextra)) { (*yylval)=gen(at_complement); return T_FACTORIAL; } else { index_status(yyextra)=0; (*yylval)=gen(at_complement,1); return T_NOT; }
 ".."                    index_status(yyextra)=0; (*yylval)=gen(at_interval,2); return T_INTERVAL;
-"!!."                    index_status(yyextra)=0; (*yylval)=gen(at_leftopen_interval,2); return T_INTERVAL;
-"..!"                    index_status(yyextra)=0; (*yylval)=gen(at_rightopen_interval,2); return T_INTERVAL;
-"!.!"                    index_status(yyextra)=0; (*yylval)=gen(at_leftrightopen_interval,2); return T_INTERVAL;
 "interval"                    index_status(yyextra)=0; (*yylval)=gen(at_interval,2); return T_UNARY_OP;
 "lim"                    index_status(yyextra)=0; (*yylval)=gen(at_limit,1); return T_UNARY_OP;
 "trier"                    index_status(yyextra)=0; (*yylval)=gen(at_sort,1); return T_UNARY_OP;
@@ -706,7 +695,6 @@ AN	[0-9a-zA-Z_~ ?\200-\355\357-\376]
 "subsop"		if (xcas_mode(yyextra)==1) (*yylval) = gen(at_maple_subsop,2); else (*yylval) = gen(at_subsop,2); index_status(yyextra)=0; return T_UNARY_OP;
 "'union'"                  index_status(yyextra)=0; (*yylval)=gen(at_union,2); return T_QUOTED_BINARY;
 "_union"                  index_status(yyextra)=0; (*yylval)=gen(at_union,2); return T_QUOTED_BINARY;
-"'symmetric_difference'"                  index_status(yyextra)=0; (*yylval)=gen(at_symmetric_difference,2); return T_QUOTED_BINARY;
 "virgule"               (*yylval) = gen(at_virgule,2); index_status(yyextra)=0; return T_UNARY_OP;
 "VARS"                  (*yylval) = gen(at_VARS,0); index_status(yyextra)=0; return T_UNARY_OP;
 "while"                 index_status(yyextra)=0; (*yylval)=gen(at_for,4); if (xcas_mode(yyextra)==3) return TI_WHILE; if (xcas_mode(yyextra)!=0) return T_MUPMAP_WHILE; return T_WHILE;
@@ -933,10 +921,6 @@ AN	[0-9a-zA-Z_~ ?\200-\355\357-\376]
   namespace giac {
 #endif // ndef NO_NAMESPACE_GIAC
 
-    bool tri (const std::pair<const char *,gen> & a ,const std::pair<const char *,gen> & b){
-      return strcmp(a.first, b.first) < 0;
-    }
-    
     // Set the input string
     // export GIAC_DEBUG=-2 to renew static_lexer.h/static_extern.h
     YY_BUFFER_STATE set_lexer_string(const std::string &s_orig,yyscan_t & scanner,GIAC_CONTEXT){
@@ -1048,29 +1032,18 @@ AN	[0-9a-zA-Z_~ ?\200-\355\357-\376]
 	      s[i]='*';
 	      s[i+1]=' ';
 	    }
-#if defined NUMWORKS || defined NSPIRE || defined FXCG || defined EMCC
-	    if (s[i]==']' && s[i+1]=='['
-#ifdef EMCC
-                && calc_mode(contextptr)==110
-#endif
-                )
+#if defined NUMWORKS || defined NSPIRE || defined FXCG
+	    if (s[i]==']' && s[i+1]=='[')
 	      s.insert(s.begin()+i+1,',');
 #endif
 	  }
 	}
 	bool instring=false;
-	// stupid match of bracket then parenthesis then quotes
-	int l=s.size(),nb=0,np=0,nq=0;
+	// stupid match of bracket then parenthesis
+	int l=s.size(),nb=0,np=0;
 	int i=0;
 	if (lexer_close_parenthesis(contextptr)){
 	  for (;i<l;++i){
-	    if (!instring && s[i]=='\''){
-	      nq++;
-	      if (nq%2==1 && i>2 && s[i-2]=='\'' && s[i-1]=='='){
-		s.insert(s.begin()+i-1,' ');
-		++l;
-	      }
-	    }
 	    if (!instring && i && s[i]=='/' && s[i-1]=='/'){
 	      // skip comment until end of line
 	      for (;i<l;++i){
@@ -1192,8 +1165,6 @@ AN	[0-9a-zA-Z_~ ?\200-\355\357-\376]
 	    ++i;
 	    continue;
 	  }
-	  if ((unsigned char)s[i]==0xc2 && (unsigned char)s[i+1]!=0xb5) // µ
-            ss += "micro";
 	  if (i && (unsigned char)s[i]==0xc2 && (unsigned char)s[i+1]!=0xb0)
 	    ss += ' ';
 	  if ( (unsigned char)s[i]==0xef && i<l-3 ){

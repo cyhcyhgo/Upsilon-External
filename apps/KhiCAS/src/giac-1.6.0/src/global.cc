@@ -1,17 +1,6 @@
 /* -*- compile-command: "g++-3.4 -I.. -g -c global.cc  -DHAVE_CONFIG_H -DIN_GIAC" -*- */
-#ifdef WIN32
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-#ifdef __MINGW_H
-#include <windows.h>
-#endif
-#endif
 
 #include "giacPCH.h"
-#if defined(EMCC) || defined(EMCC2)
-#include <emscripten.h>
-#endif
 
 /*  
  *  Copyright (C) 2000,14 B. Parisse, Institut Fourier, 38402 St Martin d'Heres
@@ -63,9 +52,7 @@ using namespace std;
 #include <string.h>
 #include <stdexcept>
 #include <algorithm>
-#if !defined RTOS_THREADX
-//#include <vector>
-#endif
+#include <vector>
 #if !defined BESTA_OS && !defined FXCG
 #include <cerrno>
 #endif
@@ -89,12 +76,7 @@ using namespace std;
 #endif
 #ifndef BESTA_OS
 #ifdef WIN32
-#if defined VISUALC
-#if !defined FREERTOS
-#include <chrono>
-#include <thread>
-#endif
-#else
+#ifndef VISUALC
 #if !defined(GNUWINCE) && !defined(__MINGW_H)
 #include <sys/cygwin.h>
 #endif
@@ -109,7 +91,7 @@ using namespace std;
 #include <FL/fl_ask.H>
 #endif
 
-#if defined VISUALC && defined GIAC_HAS_STO_38 && !defined BESTA_OS && !defined RTOS_THREADX && !defined FREERTOS 
+#if defined VISUALC && !defined BESTA_OS && !defined RTOS_THREADX && !defined FREERTOS 
 #include <Windows.h>
 #endif 
 
@@ -177,7 +159,7 @@ extern "C" int firvsprintf(char*,const char*, va_list);
 extern "C" int KeyPressed( void );
 #endif
 
-#if defined KHICAS || defined SDL_KHICAS
+#ifdef KHICAS
 #include "kdisplay.h"
 #endif
 
@@ -204,41 +186,24 @@ size_t pythonjs_stack_size=30*1024,
 void * bf_ctx_ptr=0;
 size_t bf_global_prec=128; // global precision for BF
 
-int sprintf512(char * s, const char * format, ...){
-  int z;
-  va_list ap;
-  va_start(ap,format);
-#if defined(FIR) && !defined(FIR_LINUX)
-  z = firvsnprintf(s, 512, format, ap);
-#else
-  z = vsnprintf(s, 512, format, ap);
-#endif
-  va_end(ap);
-  return z;
-}
-
 int my_sprintf(char * s, const char * format, ...){
-  int z;
-  va_list ap;
-  va_start(ap,format);
+    int z;
+    va_list ap;
+    va_start(ap,format);
 #if defined(FIR) && !defined(FIR_LINUX)
-  z = firvsprintf(s, format, ap);
+    z = firvsprintf(s, format, ap);
 #else
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-  z = vsprintf(s, format, ap);
-  // z = vsnprintf(s, RAND_MAX,format, ap);
-#pragma clang diagnostic pop  
+    z = vsprintf(s, format, ap);
 #endif
-  va_end(ap);
-  return z;
+    va_end(ap);
+    return z;
 }
 
 int ctrl_c_interrupted(int exception){
   if (!giac::ctrl_c && !giac::interrupted)
     return 0;
   giac::ctrl_c=giac::interrupted=0;
-#ifndef NO_STDEXCEPT
+#ifndef NO_STD_EXCEPT
   if (exception)
     giac::setsizeerr("Interrupted");
 #endif
@@ -419,15 +384,7 @@ const char * console_prompt(const char * s){
 // support for tar archive in flash on the numworks
 char * buf64k=0; // we only have 64k of RAM buffer on the Numworks
 const size_t buflen=(1<<16);
-#if defined NUMWORKS_SLOTB 
-int numworks_maxtarsize=0x200000-0x10000;
-#else
-#ifdef NUMWORKS_SLOTAB
-int numworks_maxtarsize=0x60000;
-#else
 int numworks_maxtarsize=0x600000-0x10000;
-#endif
-#endif
 size_t tar_first_modified_offset=0; // set to non 0 if tar data comes from Numworks
 
 
@@ -677,12 +634,11 @@ void tar_fillheader(char * buffer,size_t offset,int exec=0){
 // flash version
 int flash_adddata(const char * buffer_,const char * filename,const char * data,size_t datasize,int exec){
   vector<fileinfo_t> finfo=tar_fileinfo(buffer_,numworks_maxtarsize);
-  size_t s=finfo.size(),offset=0;
-  if (s){
-    fileinfo_t last=finfo[s-1];
-    offset=last.header_offset;
-    offset += tar_filesize(last.size);
-  }
+  size_t s=finfo.size();
+  if (s==0) return 0;
+  fileinfo_t last=finfo[s-1];
+  size_t offset=last.header_offset;
+  offset += tar_filesize(last.size);
   if (offset+1024+datasize>numworks_maxtarsize) return 0;
   buffer_ += offset;
   char * nxt=(char *) ((((size_t) buffer_)/buflen +1)*buflen);
@@ -731,12 +687,11 @@ int flash_adddata(const char * buffer_,const char * filename,const char * data,s
 int tar_adddata(char * & buffer,size_t * buffersizeptr,const char * filename,const char * data,size_t datasize,int exec){
   size_t buffersize=buffersizeptr?*buffersizeptr:0;
   vector<fileinfo_t> finfo=tar_fileinfo(buffer,buffersize);
-  size_t s=finfo.size(),offset=0;
-  if (s){
-    fileinfo_t last=finfo[s-1];
-    offset=last.header_offset;
-    offset += tar_filesize(last.size);
-  }
+  size_t s=finfo.size();
+  if (s==0) return 0;
+  fileinfo_t last=finfo[s-1];
+  size_t offset=last.header_offset;
+  offset += tar_filesize(last.size);
   buffersize=offset;
   size_t newsize=offset+1024+datasize;
   newsize=10240*((newsize+10239)/10240);
@@ -889,8 +844,6 @@ const char * tar_loadfile(const char * buffer,const char * filename,size_t * len
     if (f.filename==filename){
       if (len)
 	*len=f.size;
-      else
-        ;//return "";
       return buffer+f.header_offset+512;
     }
   }
@@ -912,8 +865,7 @@ bool match(const char * filename,const char * extension){
 }
 
 int tar_filebrowser(const char * buf,const char ** filenames,int maxrecords,const char * extension){
-  static vector<fileinfo_t> finfo;
-  finfo=tar_fileinfo(buf,0);
+  vector<fileinfo_t> finfo=tar_fileinfo(buf,0);
   int s=finfo.size();
   if (s==0) return 0;
   int j=0;
@@ -1133,7 +1085,7 @@ char * file_gettar_aligned(const char * filename,char * & freeptr){
   }
   fclose(f);
   size=res.size();
-  if (size>numworks_maxtarsize)
+  if (size<numworks_maxtarsize)
     size=numworks_maxtarsize;
   memcpy(buffer,&res.front(),size);
   return buffer;
@@ -1153,7 +1105,7 @@ int file_savetar(const char * filename,char * buffer,size_t buffersize){
   fclose(f);
   return 1;
 }
-#if !defined KHICAS && !defined SDL_KHICAS && !defined USE_GMP_REPLACEMENTS && !defined GIAC_HAS_STO_38// 
+#if !defined KHICAS && !defined USE_GMP_REPLACEMENTS && !defined GIAC_HAS_STO_38// 
 
 #ifdef HAVE_LIBDFU
 extern "C" { 
@@ -1197,7 +1149,7 @@ int dfu_exec(const char * s_){
   s="/Applications/usr/bin/"+s;
   if (giac::is_file_available(s.c_str()))
     return giac::system_no_deprecation(s.c_str());
-  s=s_; s="/opt/homebrew/bin/"+s;
+  s=s_; s="/usr/bin/"+s;
   return giac::system_no_deprecation(s.c_str());
 #else
   return system(s_);
@@ -1206,30 +1158,19 @@ int dfu_exec(const char * s_){
 #endif 
 }
 
-const int dfupos=15; // position of ...-a0 or -a1 in dfu command
-
-bool dfu_get_scriptstore_addr(size_t & start,size_t & taille,char & altdfu){
+bool dfu_get_scriptstore_addr(size_t & start,size_t & taille){
   // first try multi-boot
   const char * slots[]={"0x90000000","0x90180000","0x90400000"};
   const char * slots1[]={"0x90010000","0x90190000","0x90410000"};
-  const char * slots2[]={"0x90020000","0x90190000","0x90420000"};
   unsigned char r[32];
-  altdfu='0';
   for (int j=0;j<sizeof(slots)/sizeof(char *);++j){
     unlink("__platf");
     char cmd[256];
     strcpy(cmd,"dfu-util -i0 -a0 -s ");
     strcat(cmd,slots[j]);
-    strcat(cmd,":0x20:force -U __platf");
-    if (dfu_exec(cmd)){
-      unlink("__platf");
-      strcpy(cmd,"dfu-util -i0 -a1 -s ");
-      strcat(cmd,slots[j]);
-      strcat(cmd,":0x20:force -U __platf");
-      if (dfu_exec(cmd))
-        return false;
-      altdfu='1';
-    }
+    strcat(cmd,":0x20 -U __platf");
+    if (dfu_exec(cmd))
+      return false;
     FILE * f=fopen("__platf","r");
     if (!f){ return false; }
     int i=fread(r,1,32,f);
@@ -1242,9 +1183,8 @@ bool dfu_get_scriptstore_addr(size_t & start,size_t & taille,char & altdfu){
       break;
     unlink("__platf");
     strcpy(cmd,"dfu-util -i0 -a0 -s ");
-    cmd[dfupos]=altdfu;
     strcat(cmd,slots1[j]);
-    strcat(cmd,":0x20:force -U __platf");
+    strcat(cmd,":0x20 -U __platf");
     if (dfu_exec(cmd))
       return false;
     f=fopen("__platf","r");
@@ -1253,29 +1193,12 @@ bool dfu_get_scriptstore_addr(size_t & start,size_t & taille,char & altdfu){
     fclose(f);
     if (i!=32)
       return false;
-    if (r[0]!=0xfe || r[1]!=0xed || r[2]!=0xc0 || r[3]!=0xde){
-      unlink("__platf");
-      strcpy(cmd,"dfu-util -i0 -a0 -s ");
-      cmd[dfupos]=altdfu;
-      strcat(cmd,slots2[j]);
-      strcat(cmd,":0x20:force -U __platf");
-      if (dfu_exec(cmd))
-        return false;
-      f=fopen("__platf","r");
-      if (!f){ return false; }
-      i=fread(r,1,32,f);
-      fclose(f);
-      if (i!=32)
-        return false;
-    }
     start=((r[15]*256U+r[14])*256+r[13])*256+r[12];
-    if (r[15]!=0x20 && r[15]!=0x24) // ram is at 0x20000000 (+256K)
+    if (r[15]!=0x20) // ram is at 0x20000000 (+256K)
       continue;
     taille=((r[19]*256U+r[18])*256+r[17])*256+r[16];
     unlink("__platf");   // check 4 bytes at start address
-    string ds="dfu-util -i0 -a0 -s "+giac::print_INT_(start)+":0x4:force -U __platf";
-    ds[dfupos]=altdfu;
-    if (dfu_exec((ds).c_str()))
+    if (dfu_exec(("dfu-util -i0 -a0 -s "+giac::print_INT_(start)+":0x4:force -U __platf").c_str()))
       continue;
     f=fopen("__platf","r");
     if (!f){ return false; }
@@ -1288,9 +1211,7 @@ bool dfu_get_scriptstore_addr(size_t & start,size_t & taille,char & altdfu){
   }
   // no valid slot, try without bootloader
   unlink("__platf");
-  string ds="dfu-util -i0 -a0 -s 0x080001c4:0x20:force -U __platf";
-  ds[dfupos]=altdfu;
-  if (dfu_exec(ds.c_str()))
+  if (dfu_exec("dfu-util -i0 -a0 -s 0x080001c4:0x20 -U __platf"))
     return false;
   FILE * f=fopen("__platf","r");
   if (!f){ return false; }
@@ -1304,35 +1225,23 @@ bool dfu_get_scriptstore_addr(size_t & start,size_t & taille,char & altdfu){
   return true;
 }
 
-char dfu_alt(){
-  size_t start,taille;
-  char altdfu;
-  if (!dfu_get_scriptstore_addr(start,taille,altdfu)) return ' ';
-  return altdfu;
-}
-
 bool dfu_get_scriptstore(const char * fname){
   unlink(fname);
   size_t start,taille;
-  char altdfu;
-  if (!dfu_get_scriptstore_addr(start,taille,altdfu)) return false;
-  string s="dfu-util -i0 -a0 -U "+string(fname)+" -s "+ giac::print_INT_(start)+":"+giac::print_INT_(taille)+":force";
-  s[dfupos]=altdfu;
+  if (!dfu_get_scriptstore_addr(start,taille)) return false;
+  string s="dfu-util -U "+string(fname)+" -i0 -a0 -s "+ giac::print_INT_(start)+":"+giac::print_INT_(taille)+":force";
   return !dfu_exec(s.c_str());
 }
 
 bool dfu_send_scriptstore(const char * fname){
   size_t start,taille;
-  char altdfu;
-  if (!dfu_get_scriptstore_addr(start,taille,altdfu)) return false;
-  string s="dfu-util -i0 -a0 -D "+string(fname)+" -s "+ giac::print_INT_(start)+":"+giac::print_INT_(taille)+":force";
-  s[dfupos]=altdfu;
+  if (!dfu_get_scriptstore_addr(start,taille)) return false;
+  string s="dfu-util -D "+string(fname)+" -i0 -a0 -s "+ giac::print_INT_(start)+":"+giac::print_INT_(taille)+":force";
   return !dfu_exec(s.c_str());
 } 
 
 bool dfu_send_rescue(const char * fname){
   string s=string("dfu-util -i0 -a0 -s 0x20030000:force:leave -D ")+ fname;
-  s[dfupos]=dfu_alt();
   return !dfu_exec(s.c_str());
 }
 
@@ -1345,8 +1254,7 @@ char hex2char(int i){
 
 // send to 0x90000000+offset*0x10000
 bool dfu_send_firmware(const char * fname,int offset){
-  string s=string("dfu-util -i0 -a0 -s 0x90");
-  s[dfupos]=dfu_alt();
+  string s=string("dfu-util -i0 -a0 -s 0x90"); 
   s += hex2char(offset/16);
   s += hex2char(offset);
   s += "0000 -D ";
@@ -1355,42 +1263,25 @@ bool dfu_send_firmware(const char * fname,int offset){
 }
 
 bool dfu_send_apps(const char * fname){
-  string s=string("dfu-util -i0 -a0 -s 0x90200000 -D ")+ fname;
-  return !dfu_exec(s.c_str());
-}
-
-bool dfu_send_slotab(const char * fnamea,const char * fnameb1,const char * fnameb2){
-  size_t start,taille; char altdfu;
-  if (!dfu_get_scriptstore_addr(start,taille,altdfu))
-    return false;
-  string s;
-  if (fnamea){
-    s=string("dfu-util -i0 -a0 -s 0x90260000 -D ")+ fnamea;
-    if (dfu_exec(s.c_str()))
-      return false;
-  }
-  s=string("dfu-util -i0 -a0 -s 0x90400000 -D ")+ (start>=0x24000000?fnameb2:fnameb1);
+  string s=string("dfu-util -i 0 -a 0 -s 0x90200000 -D ")+ fname;
   return !dfu_exec(s.c_str());
 }
 
 bool dfu_get_epsilon_internal(const char * fname){
   unlink(fname);
-  string s=string("dfu-util -i0 -a0 -s 0x08000000:0x8000:force -U ")+ fname;
-  s[dfupos]=dfu_alt();
+  string s=string("dfu-util -i 0 -a 0 -s 0x08000000:0x8000 -U ")+ fname;
   return !dfu_exec(s.c_str());
 }
 
 bool dfu_send_bootloader(const char * fname){
   unlink(fname);
-  string s=string("dfu-util -i0 -a0 -s 0x08000000 -D ")+ fname;
-  s[dfupos]=dfu_alt();
+  string s=string("dfu-util -i 0 -a 0 -s 0x08000000 -D ")+ fname;
   return !dfu_exec(s.c_str());
 }
 
 bool dfu_get_slot(const char * fname,int slot){
   unlink(fname);
-  string s=string("dfu-util -i0 -a0 -s ");
-  s[dfupos]=dfu_alt();
+  string s=string("dfu-util -i 0 -a 0 -s ");
   switch (slot){
   case 1:
     s += "0x90000000:0x130000";
@@ -1439,8 +1330,8 @@ bool dfu_check_epsilon2(const char * fname){
   srand(time(NULL));
   int i;
   for (i=0;i<n;++i){
-    int j=(std_rand()/(1.0+RAND_MAX))*n;
-    ptr[j]=std_rand();
+    int j=(rand()/(1.0+RAND_MAX))*n;
+    ptr[j]=rand();
   }
   for (i=0;i<n;++i){
     fputc(ptr[i],f);
@@ -1448,13 +1339,12 @@ bool dfu_check_epsilon2(const char * fname){
   fclose(f);
   // write to the device something that can not be guessed 
   // without really storing to flash
-  string s=string("dfu-util -i0 -a0 -s 0x90120000:0xe0000:force -D ")+ fname;
+  string s=string("dfu-util -i 0 -a 0 -s 0x90120000:0xe0000 -D ")+ fname;
   if (dfu_exec(s.c_str()))
     return false;
   // retrieve it and compare
   unlink(fname);
-  s=string("dfu-util -i0 -a0 -s 0x90120000:0xe0000:force -U ")+ fname;
-  s[dfupos]=dfu_alt();
+  s=string("dfu-util -i 0 -a 0 -s 0x90120000:0xe0000 -U ")+ fname;
   if (dfu_exec(s.c_str()))
     return false;
   f=fopen(fname,"rb");
@@ -1471,15 +1361,14 @@ bool dfu_check_epsilon2(const char * fname){
 // check that we can really read/write on the Numworks at 0x90740000
 // and get the same
 bool dfu_check_apps2(const char * fname){
-  char altdfu=dfu_alt();
   FILE * f=fopen(fname,"wb");
   int n=0xa0000;
   char * ptr=(char *) malloc(n);
   srand(time(NULL));
   int i;
   for (i=0;i<n;++i){
-    int j=(giac::std_rand()/(1.0+RAND_MAX))*n;
-    ptr[j]=giac::std_rand();
+    int j=(rand()/(1.0+RAND_MAX))*n;
+    ptr[j]=rand();
   }
   for (i=0;i<n;++i){
     fputc(ptr[i],f);
@@ -1487,13 +1376,12 @@ bool dfu_check_apps2(const char * fname){
   fclose(f);
   // write to the device something that can not be guessed 
   // without really storing to flash
-  string s=string("dfu-util -i0 -a0 -s 0x90740000:0xa0000 -D ")+ fname;
+  string s=string("dfu-util -i 0 -a 0 -s 0x90740000:0xa0000 -D ")+ fname;
   if (dfu_exec(s.c_str()))
     return false;
   // retrieve it and compare
   unlink(fname);
-  s=string("dfu-util -i0 -a0 -s 0x90740000:0xa0000:force -U ")+ fname;
-  s[dfupos]=altdfu;
+  s=string("dfu-util -i 0 -a 0 -s 0x90740000:0xa0000 -U ")+ fname;
   if (dfu_exec(s.c_str()))
     return false;
   f=fopen(fname,"rb");
@@ -1506,18 +1394,11 @@ bool dfu_check_apps2(const char * fname){
   return i==n;
 }
 
-bool dfu_get_apps(const char * fname,char & altdfu){
+bool dfu_get_apps(const char * fname){
   unlink(fname);
-  string s=string("dfu-util -i0 -a0 -s 0x90200000:0x600000:force -U ")+ fname;
-  s[dfupos]=altdfu;
+  string s=string("dfu-util -i 0 -a 0 -s 0x90200000:0x600000 -U ")+ fname;
   return !dfu_exec(s.c_str());
 }
-
-bool dfu_get_apps(const char * fname){
-  char altdfu=dfu_alt();
-  return dfu_get_apps(fname,altdfu);
-}
-
 
 char * numworks_gettar(size_t & tar_first_modif_offset){
   if (!dfu_get_apps("__apps"))
@@ -1616,7 +1497,7 @@ namespace giac {
       }
       return makevecteur(res1,res2,res3,res4);
     }
-#if !defined KHICAS && !defined SDL_KHICAS && !defined USE_GMP_REPLACEMENTS && !defined GIAC_HAS_STO_38
+#if !defined KHICAS && !defined USE_GMP_REPLACEMENTS && !defined GIAC_HAS_STO_38
     if (g.type==_INT_){
       if (g.val==1){
 	char * buf= numworks_gettar(tar_first_modified_offset);
@@ -1633,7 +1514,7 @@ namespace giac {
 	if (!buf) return 0;
 	if (s==2 && v[1].type==_STRNG)
 	  return file_savetar(v[1]._STRNGptr->c_str(),buf,0);
-#if !defined KHICAS && !defined SDL_KHICAS && !defined USE_GMP_REPLACEMENTS && !defined GIAC_HAS_STO_38
+#if !defined KHICAS && !defined USE_GMP_REPLACEMENTS && !defined GIAC_HAS_STO_38
 	if (s==2 && v[1].type==_INT_){
 	  if (v[1].val==1)
 	    return numworks_sendtar(buf,0,tar_first_modified_offset);
@@ -1680,7 +1561,7 @@ namespace giac {
   }
   
 
-#if !defined KHICAS && !defined SDL_KHICAS && !defined USE_GMP_REPLACEMENTS && !defined GIAC_HAS_STO_38
+#if !defined KHICAS && !defined USE_GMP_REPLACEMENTS && !defined GIAC_HAS_STO_38
   bool scriptstore2map(const char * fname,nws_map & m){
     FILE * f=fopen(fname,"rb");
     if (!f)
@@ -1696,7 +1577,7 @@ namespace giac {
     // 00
     // type 
     // record data
-    if (*((unsigned *)ptr)!=0xee0bddba)  // ba dd 0b ee
+    if (*ptr!=0xee0bddba)  // ba dd 0b ee
       return false; 
     int pos=4; ptr+=4;
     for (;pos<nwstoresize1;){
@@ -1757,7 +1638,7 @@ namespace giac {
 
   
 
-#if !defined KHICAS && !defined SDL_KHICAS && !defined USE_GMP_REPLACEMENTS && !defined GIAC_HAS_STO_38
+#if !defined KHICAS && !defined USE_GMP_REPLACEMENTS && !defined GIAC_HAS_STO_38
   const unsigned char rsa_n_tab[]=
     {
       0xf2,0x0e,0xd4,0x9d,0x44,0x04,0xc4,0xc8,0x6a,0x5b,0xc6,0x9a,0xd6,0xdf,
@@ -2021,7 +1902,7 @@ namespace giac {
   int caseval_n=0,caseval_mod=0,caseval_unitialized=-123454321;
 #if !defined POCKETCAS
   void control_c(){
-#if defined NSPIRE || defined KHICAS || defined SDL_KHICAS
+#if defined NSPIRE || defined KHICAS
     if (
 #if defined NSPIRE || defined NSPIRE_NEWLIB
 	on_key_enabled && on_key_pressed()
@@ -2060,7 +1941,7 @@ namespace giac {
 #endif // POCKETCAS
 #endif // TIMEOUT
 
-#if defined KHICAS || defined SDL_KHICAS
+#if defined KHICAS
   void usleep(int t){
     os_wait_1ms(t/1000);
   }
@@ -2081,14 +1962,8 @@ namespace giac {
     // return _access(path, mode );
     return 0;
   }
-#if (defined RTOS_THREADX || defined VISUALC) && !defined FREERTOS && !defined WIN32
+#ifdef RTOS_THREADX
 extern "C" void Sleep(unsigned int miliSecond);
-#endif
-
-#if 0
-  extern "C" void Sleep(unsigned int ms){
-    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-  }
 #endif
 
   void usleep(int t){
@@ -2111,7 +1986,6 @@ extern "C" void Sleep(unsigned int miliSecond);
   bool threads_allowed=true,mpzclass_allowed=true;
 #ifdef HAVE_LIBPTHREAD
   pthread_mutex_t interactive_mutex = PTHREAD_MUTEX_INITIALIZER;
-  pthread_mutex_t fork_mutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
   std::vector<aide> * & vector_aide_ptr (){
@@ -2821,12 +2695,8 @@ extern "C" void Sleep(unsigned int miliSecond);
     return *ans;
   }
   vecteur & history_plot(GIAC_CONTEXT){
-    if (contextptr){
-      vecteur * hist=contextptr->history_plot_ptr;
-      if (hist->size()>=256)
-        hist->erase(hist->begin(),hist->end()-128);
-      return *hist;
-    }
+    if (contextptr)
+      return *contextptr->history_plot_ptr;
     else
       return _history_plot_();
   }
@@ -3094,7 +2964,7 @@ extern "C" void Sleep(unsigned int miliSecond);
 #ifdef FXCG
   static ostream * _logptr_=0;
 #else
-#if defined KHICAS || defined SDL_KHICAS
+#ifdef KHICAS
   stdostream os_cerr;
   static my_ostream * _logptr_=&os_cerr;
 #else
@@ -3107,13 +2977,13 @@ extern "C" void Sleep(unsigned int miliSecond);
       res=contextptr->globalptr->_logptr_;
     else
       res= _logptr_;
-#if (defined(EMCC) || defined(EMCC2)) && !defined SDL_KHICAS
+#if defined(EMCC) || defined(EMCC2)
     return res?res:&COUT;
 #else
 #ifdef FXCG
     return 0;
 #else
-#if defined KHICAS || defined SDL_KHICAS
+#ifdef KHICAS
     return res?res:&os_cerr;
 #else
     return res?res:&CERR;
@@ -3134,7 +3004,7 @@ extern "C" void Sleep(unsigned int miliSecond);
 #endif
   }
 
-  thread_param::thread_param(): _kill_thread(0), thread_eval_status(-1), v(6)
+  thread_param::thread_param(): _kill_thread(false), thread_eval_status(-1), v(6)
 #ifdef HAVE_LIBPTHREAD
 #ifdef __MINGW_H
 			      ,eval_thread(),stackaddr(0)
@@ -3142,7 +3012,6 @@ extern "C" void Sleep(unsigned int miliSecond);
 			      ,eval_thread(0),stackaddr(0)
 #endif
 #endif
-    ,stack(0)
   { 
   }
 
@@ -3163,12 +3032,12 @@ extern "C" void Sleep(unsigned int miliSecond);
     return (contextptr && contextptr->globalptr)?contextptr->globalptr->_thread_param_ptr:context0_thread_param_ptr();
   }
 
-  int kill_thread(GIAC_CONTEXT){
+  bool kill_thread(GIAC_CONTEXT){
     thread_param * ptr= (contextptr && contextptr->globalptr )?contextptr->globalptr->_thread_param_ptr:0;
     return ptr?ptr->_kill_thread:context0_thread_param_ptr()->_kill_thread;
   }
 
-  void kill_thread(int b,GIAC_CONTEXT){
+  void kill_thread(bool b,GIAC_CONTEXT){
     thread_param * ptr= (contextptr && contextptr->globalptr )?contextptr->globalptr->_thread_param_ptr:0;
     if (!ptr)
       ptr=context0_thread_param_ptr();
@@ -3682,7 +3551,7 @@ extern "C" void Sleep(unsigned int miliSecond);
       return _turtle_();
   }
 
-#if !defined KHICAS && !defined SDL_KHICAS
+#ifndef KHICAS
   // protect turtle access by a lock
   // turtle changes are mutually exclusive even in different contexts
 #ifdef HAVE_LIBPTHREAD
@@ -3732,7 +3601,7 @@ extern "C" void Sleep(unsigned int miliSecond);
   int debug_infolevel=0;
 #endif
   int printprog=0;
-#if defined __APPLE__ || defined VISUALC || defined __MINGW_H || defined BESTA_OS || defined NSPIRE || defined FXCG || defined NSPIRE_NEWLIB || defined KHICAS || defined SDL_KHICAS
+#if defined __APPLE__ || defined VISUALC || defined __MINGW_H || defined BESTA_OS || defined NSPIRE || defined FXCG || defined NSPIRE_NEWLIB || defined KHICAS
 #ifdef _WIN32
   int threads=atoi(getenv("NUMBER_OF_PROCESSORS"));
 #else
@@ -3745,11 +3614,11 @@ extern "C" void Sleep(unsigned int miliSecond);
   // gbasis max number of pairs by F4 iteration
   // setting to 2000 accelerates cyclic9mod but cyclic9 would be slower
   // 32768 is enough for cyclic10mod without truncation and not too large for yang1
-  unsigned simult_primes=20,simult_primes2=20,simult_primes3=20,simult_primes_seuil2=-1,simult_primes_seuil3=-1; 
+  unsigned simult_primes=16,simult_primes2=16,simult_primes3=16,simult_primes_seuil2=-1,simult_primes_seuil3=-1; 
   // gbasis modular algorithm on Q: simultaneous primes (more primes means more parallel threads but also more memory required)
   double gbasis_reinject_ratio=0.2;
   // gbasis modular algo on Q: if new basis element exceed this ratio, new elements are reinjected in the ideal generators for the remaining computations
-  double gbasis_reinject_speed_ratio=1./8; // modified from 1/6. for cyclic8
+  double gbasis_reinject_speed_ratio=1/6.;
   // gbasis modular algo on Q: new basis elements are reinjected if the 2nd run with learning CPU speed / 1st run without learning CPU speed is >=
   int gbasis_logz_age_sort=0,gbasis_stop=0;
   // rur_do_gbasis==-1 no gbasis Q recon for rur, ==0 always gbasis Q recon, >0 size limit in monomials of the gbasis for gbasis Q recon
@@ -3759,12 +3628,7 @@ extern "C" void Sleep(unsigned int miliSecond);
   unsigned short int GIAC_PADIC=50;
   const char cas_suffixe[]=".cas";
   int MAX_PROD_EXPAND_SIZE=4096;
-  int MAX_SIMPLIFIER_VECTSIZE=256;
-  int ABERTH_NMAX=25;
-  int ABERTH_NBITSMAX=8192;
-  int LAZY_ALG_EXT=0;
-  int ALG_EXT_DIGITS=180;
-#if defined RTOS_THREADX || defined BESTA_OS || defined(KHICAS) || defined SDL_KHICAS
+#if defined RTOS_THREADX || defined BESTA_OS || defined(KHICAS)
 #ifdef BESTA_OS
   int LIST_SIZE_LIMIT = 100000 ;
   int FACTORIAL_SIZE_LIMIT = 1000 ;
@@ -3776,7 +3640,6 @@ extern "C" void Sleep(unsigned int miliSecond);
 #endif
   int GAMMA_LIMIT = 100 ;
   int NEWTON_DEFAULT_ITERATION=40;
-  int NEWTON_MAX_RANDOM_RESTART=5;
   int TEST_PROBAB_PRIME=25;
   int GCDHEU_MAXTRY=5;
   int GCDHEU_DEGREE=100;
@@ -3794,16 +3657,12 @@ extern "C" void Sleep(unsigned int miliSecond);
   int MAX_ALG_EXT_ORDER_SIZE = 4;
   int MAX_COMMON_ALG_EXT_ORDER_SIZE = 16;
   int TRY_FU_UPRIME=5;
-  int TRY_FU_UPRIME_MAXLEAFSIZE=128;
   int SOLVER_MAX_ITERATE=25;
   int MAX_PRINTABLE_ZINT=10000;
   int MAX_RECURSION_LEVEL=9;
-  int GBASIS_COEFF_STRATEGY=0;
-  float GBASIS_COEFF_MAXLOGRATIO=2;
   int GBASIS_DETERMINISTIC=20;
   int GBASISF4_MAX_TOTALDEG=1024;
   int GBASISF4_MAXITER=256;
-  int RUR_PARAM_MAX_DEG=128;
   // int GBASISF4_BUCHBERGER=5;
   const int BUFFER_SIZE=512;
 #else
@@ -3820,11 +3679,6 @@ extern "C" void Sleep(unsigned int miliSecond);
 #endif
   int GAMMA_LIMIT = 100 ;
   int NEWTON_DEFAULT_ITERATION=60;
-#ifdef GIAC_GGB
-  int NEWTON_MAX_RANDOM_RESTART=20;
-#else
-  int NEWTON_MAX_RANDOM_RESTART=5;
-#endif
   int TEST_PROBAB_PRIME=25;
   int GCDHEU_MAXTRY=5;
   int GCDHEU_DEGREE=100;
@@ -3850,23 +3704,19 @@ extern "C" void Sleep(unsigned int miliSecond);
   int MAX_COMMON_ALG_EXT_ORDER_SIZE = 64;
 #endif
   int TRY_FU_UPRIME=5;
-  int TRY_FU_UPRIME_MAXLEAFSIZE=128;
   int SOLVER_MAX_ITERATE=25;
   int MAX_PRINTABLE_ZINT=1000000;
   int MAX_RECURSION_LEVEL=100;
-  int GBASIS_COEFF_STRATEGY=0;
-  float GBASIS_COEFF_MAXLOGRATIO=2;
   int GBASIS_DETERMINISTIC=50;
   int GBASISF4_MAX_TOTALDEG=16384;
   int GBASISF4_MAXITER=1024;
-  int RUR_PARAM_MAX_DEG=128;
   // int GBASISF4_BUCHBERGER=5;
   const int BUFFER_SIZE=16384;
 #endif
   volatile bool ctrl_c=false,interrupted=false,kbd_interrupted=false;
 #ifdef GIAC_HAS_STO_38
-  double powlog2float=1e4*10; // increase max int size for HP Prime
-  int MPZ_MAXLOG2=8600*10; // max 2^8600 about 1K*10
+  double powlog2float=1e4;
+  int MPZ_MAXLOG2=8600; // max 2^8600 about 1K
 #else
   double powlog2float=1e8;
   int MPZ_MAXLOG2=80000000; // 100 millions bits
@@ -3878,7 +3728,6 @@ extern "C" void Sleep(unsigned int miliSecond);
 #endif
   int MODRESULTANT=20;
   int ABS_NBITS_EVALF=1000;
-  int SET_COMPARE_MAXIDNT=20;
 
   // used by WIN32 for the path to the xcas directory
   string & xcasroot(){
@@ -3907,7 +3756,7 @@ extern "C" void Sleep(unsigned int miliSecond);
 
   void ctrl_c_signal_handler(int signum){
     ctrl_c=true;
-#if !defined KHICAS && !defined SDL_KHICAS && !defined NSPIRE_NEWLIB && !defined WIN32 && !defined BESTA_OS && !defined NSPIRE && !defined FXCG && !defined POCKETCAS && !defined __MINGW_H
+#if !defined KHICAS && !defined NSPIRE_NEWLIB && !defined WIN32 && !defined BESTA_OS && !defined NSPIRE && !defined FXCG && !defined POCKETCAS && !defined __MINGW_H
     if (child_id)
       kill(child_id,SIGINT);
 #endif
@@ -3939,9 +3788,7 @@ extern "C" void Sleep(unsigned int miliSecond);
   }
 #endif
 
-#if (defined HAVE_SIGNAL_H_OLD || defined HAVE_SIGNAL_H ) && !defined NO_STDEXCEPT
-  //#define SIGNALDBG
-  int forkmaxleafsize=2048; // change by fork_timeout(n)
+#if defined HAVE_SIGNAL_H_OLD 
   static bool running_file=false;
   static int run_modif_pos;
   bool synchronize_history=true;
@@ -3968,33 +3815,12 @@ extern "C" void Sleep(unsigned int miliSecond);
   volatile bool child_busy=false,data_ready=false;
   // child sends a SIGUSR1
   void data_signal_handler(int signum){
-#ifdef SIGNALDBG
-    cerr << "Parent: child signaled data ready" << '\n';
-#endif
-#ifdef HAVE_LIBPTHREAD
-    pthread_mutex_lock(&fork_mutex);
-#endif
-    signal(SIGUSR1,SIG_IGN);
+          // cerr << "Parent called" << '\n';
     signal_plot_parent=false;
     child_busy=false;
     data_ready=true;
-#ifdef HAVE_LIBPTHREAD
-    pthread_mutex_unlock(&fork_mutex);
-#endif
   }
 
-  void child_launched_signal_handler(int signum){
-#ifdef SIGNALDBG
-    cerr << "Parent: child launched signaled " << '\n';
-#endif
-#ifdef HAVE_PTHREAD_H
-    pthread_mutex_lock(&fork_mutex);
-    signal_child=true;
-    pthread_mutex_unlock(&fork_mutex);
-#else
-    signal_child=true;
-#endif
-  }
   /*
   void control_c(){
     if (ctrl_c){
@@ -4007,26 +3833,19 @@ extern "C" void Sleep(unsigned int miliSecond);
   */
 
   // child sends a SIGUSR2 (intermediate data)
-  void intermediate_signal_handler(int signum){
-#ifdef SIGNALDBG
-    cerr << "intermediate_signal_handler Parent called" << '\n';
-#endif
+  void plot_signal_handler(int signum){
+          // cerr << "Plot_signal_handler Parent called" << '\n';
     signal_plot_parent=true;
     child_busy=false;
     data_ready=true;
   }
 
   void child_signal_handler(int signum){
-#ifdef SIGNALDBG
-    cerr << "Child called" << '\n';
-#endif
+    // cerr << "Child called" << '\n';
     signal_child=true;
   }
   
-  void child_intermediate_done(int signum){
-#ifdef SIGNALDBG
-    cerr << "Child called for intermediate data" << '\n';
-#endif
+  void child_plot_done(int signum){
     signal_plot_child=true;
   }
   
@@ -4062,144 +3881,184 @@ extern "C" void Sleep(unsigned int miliSecond);
     return res;
   }
 
-  static pid_t make_child(GIAC_CONTEXT){ // forks and return child id
+  static pid_t make_child(){ // forks and return child id
+#if defined HAVE_NO_SIGNAL_H || defined(DONT_FORK)
+#ifdef DONT_FORK
+	  child_id = 1;
+	  return 1;
+#endif // DONT_FORK
+	return -1;
+#else // HAVE_NO_SIGNAL_H
     running_file=false;
+    child_busy=false;
     ctrl_c=false;
-#ifdef HAVE_PTHREAD_H
-    pthread_mutex_lock(&fork_mutex);
-    child_busy=false;
-    pthread_mutex_unlock(&fork_mutex);
-#else
-    child_busy=false;
-#endif
     signal(SIGINT,ctrl_c_signal_handler);
     signal(SIGUSR1,data_signal_handler);
-    if (child_id>(pid_t) 1)
+    signal(SIGUSR2,plot_signal_handler);
+    if (child_id>(pid_t) 0)
       return child_id; // exists
-    signal_child=false;
-    signal(SIGUSR2,child_launched_signal_handler); // don't do anything, just wait for child ready
     child_id=fork();
     if (child_id<(pid_t) 0)
       throw(std::runtime_error("Make_child error: Unable to fork"));
-    if (child_id){ // parent process
-#ifdef HAVE_LIBPTHREAD
-      for (;;){
-        pthread_mutex_lock(&fork_mutex);
-        bool b=signal_child;
-        pthread_mutex_unlock(&fork_mutex);
-        if (b)
-          break;
-        usleep(1);
-      }
-#else
-      signal_child=false;
-      // parent process, wait child ready
-      /* Wait for SIGUSR2. */
-      while (!signal_child)
-        usleep(1);
-#endif
-
-#ifdef SIGNALDBG
-      cerr << "Parent received signal for child ready" << '\n';
-#endif
-      /* OK */
-      signal(SIGUSR2,intermediate_signal_handler);
-    } else {
-#ifdef SIGNALDBG
-      cerr << "Child launched" << '\n';
-#endif
-      // child process, redirect input/output
+    if (!child_id){ // child process, redirect input/output
       sigset_t mask, oldmask;
       sigemptyset (&mask);
       sigaddset (&mask, SIGUSR1);
       signal(SIGUSR1,child_signal_handler);
-      signal(SIGUSR2,child_intermediate_done);
+      signal(SIGUSR2,child_plot_done);
       signal_child=false;
       gen args;
       /* Wait for a signal to arrive. */
       sigprocmask (SIG_BLOCK, &mask, &oldmask);
-      kill(parent_id,SIGUSR2);
       signal_child=false;
-      for (int no=0;;++no){
-#ifdef SIGNALDBG
-        cerr << "Child ready" << '\n';
-#endif
+      for (;;){
+	// cerr << "Child ready" << '\n';
 #ifndef WIN32
 	while (!signal_child)
 	  sigsuspend (&oldmask);
 	sigprocmask (SIG_UNBLOCK, &mask, NULL);
 #endif
-#ifdef SIGNALDBG
-        cerr << "Child reads and eval" << '\n';
-#endif
 	// read and evaluate input
 	CLOCK_T start, end;
 	double elapsed;
 	start = CLOCK();
-        string messages_to_print="";
+        messages_to_print="";
 	ifstream child_in(cas_entree_name().c_str());
 	// Unarchive step
 	try {
-          args=unarchive(child_in,contextptr);
+	  child_in >> rpn_mode(context0) >> global_window_ymin >> history_begin_level ;
+	  // cerr << args << '\n';
+	  if (history_begin_level<0){
+	    child_in >> synchronize_history;
+	    args=unarchive(child_in,context0);
+	    if (!synchronize_history){
+	      // cerr << "No sync " << '\n';
+	      history_in(0)[-history_begin_level-1]=args;
+	      history_out(0)=subvect(history_out(0),-history_begin_level-1);
+	    }
+	    else {
+	      // cerr << " Sync " << '\n';
+	      history_in(0)=*args._VECTptr;
+	      args=unarchive(child_in,context0);
+	      history_out(0)=*args._VECTptr;
+	    }
+	  }
+	  else {
+	    args=unarchive(child_in,context0);
+	    // cerr << "Lu1 " << args << '\n';
+	    if (history_begin_level>signed(history_in(context0).size()))
+	      history_begin_level=history_in(context0).size();
+	    history_in(0)=mergevecteur(subvect(history_in(context0),history_begin_level),*args._VECTptr);
+	    args=unarchive(child_in,context0);
+	    // cerr << "Lu2 " << args << '\n';
+	    history_out(0)=mergevecteur(subvect(history_out(context0),history_begin_level),*args._VECTptr);
+	    args=unarchive(child_in,context0);
+	    // cerr << "Lu3 " << args << '\n';
+	    history_in(0).push_back(args);
+	  }
 	}
 	catch (std::runtime_error & error ){
 	  last_evaled_argptr(contextptr)=NULL;
 	  args = string2gen("Child unarchive error:"+string(error.what()),false);
 	}
-#ifdef SIGNALDBG
-        cerr << "Child reads " << args << '\n';
-#endif
 	child_in.close();
-        // Clone the context, so that we don't disturb anything
-        context * ptr=clone_context(contextptr);
-        gen args_evaled;
-        if (ptr){
-          try {
-            args_evaled=args.eval(1,ptr);
-          }
-          catch (std::runtime_error & error){
-            last_evaled_argptr(contextptr)=NULL;
-            args_evaled=catch_err(error);
-          }
-          delete ptr;
-        } else args_evaled=string2gen("Unable to clone context",false);
-#ifdef SIGNALDBG
-        cerr << "Child result " << args_evaled << '\n';
-#endif
+	// cerr << args << '\n';
+	// output result of evaluation to child_out
+	gen args_evaled;
+	{ // BEGIN of old try block
+	  if (history_begin_level<0){
+	    history_begin_level=-history_begin_level-1;
+	    int s=history_in(context0).size();
+	    block_signal=true;
+	    for (int k=history_begin_level;k<s;++k){
+	      try {
+                if (history_in(context0)[k].is_symb_of_sommet(at_signal) || history_in(context0)[k].is_symb_of_sommet(at_debug))
+		  history_out(context0).push_back(eval(history_in(context0)[k]._SYMBptr->feuille,eval_level(context0),context0));
+                else
+		  history_out(context0).push_back(eval(history_in(context0)[k],eval_level(context0),context0));
+	      }
+	      catch (std::runtime_error & error){
+		last_evaled_argptr(contextptr)=NULL;
+		history_out(context0).push_back(catch_err(error));
+	      }
+	    }
+	    args=vecteur(history_in(context0).begin()+history_begin_level,history_in(context0).end());
+	    args_evaled=vecteur(history_out(context0).begin()+history_begin_level,history_out(context0).end());
+	  }
+	  else {
+	    if ( (args.type!=_VECT) || (args.subtype!=_RUNFILE__VECT) ){
+	      if (debug_infolevel>10)
+		cerr << "Child eval " << args << '\n';
+	      try {
+		args_evaled=args.eval(1,context0);
+	      }
+	      catch (std::runtime_error & error){
+		last_evaled_argptr(contextptr)=NULL;
+		args_evaled=catch_err(error);
+	      }
+	      history_out(context0).push_back(args_evaled);
+	      if (debug_infolevel>10)
+		cerr << "Child result " << args_evaled << '\n';
+	    }
+	    else {
+	      vecteur v;
+	      history_in(context0).pop_back();
+	      const_iterateur it=args._VECTptr->begin(),itend=args._VECTptr->end();
+	      for (;it!=itend;++it){
+		if (it->is_symb_of_sommet(at_signal) ||it->is_symb_of_sommet(at_debug) )
+		  continue;
+		history_in(context0).push_back(*it);
+		try {
+		  if (it->is_symb_of_sommet(at_debug))
+		    args_evaled=it->_SYMBptr->feuille.eval(1,context0);
+		  else
+		    args_evaled=it->eval(1,context0);
+		}
+		catch (std::runtime_error & error){
+		  last_evaled_argptr(contextptr)=NULL;
+		  args_evaled=catch_err(error);
+		}
+		// cerr << args_evaled << '\n';
+		history_out(context0).push_back(args_evaled);
+		v.push_back(args_evaled);
+		ofstream child_out(cas_sortie_name().c_str());
+		archive(child_out,*it,context0);
+		archive(child_out,args_evaled,context0);
+		child_out << messages_to_print << "ÿ" ;
+		child_out.close();
+		// cerr << "Signal reads " << res << '\n';
+		kill_and_wait_sigusr2();
+	      }
+	      // args_evaled=gen(v,args.subtype);
+	      args=0;
+	      args_evaled=0;
+	    }
+	  }
+	} // END of old try/catch block
 	block_signal=false;
 	end = CLOCK();
 	elapsed = ((double) (end - start)) / CLOCKS_PER_SEC;
 	ofstream child_out(cas_sortie_name().c_str());
-	archive(child_out,args,contextptr) ;
-        int ta=taille(args_evaled,RAND_MAX);
-        if (ta>=forkmaxleafsize){
-          CERR << "Maxleafsize exceeded " << ta << ">=" << forkmaxleafsize << "\nYou can change maxleafsize by running fork_timeout(n) with a larger value of n\n";
-          archive(child_out,undef,contextptr) ;
-        }
-        else
-          archive(child_out,args_evaled,contextptr) ;
+	archive(child_out,args,context0) ;
+	archive(child_out,args_evaled,context0) ;
 	child_out << messages_to_print ;
 	int mm=messages_to_print.size();
 	if (mm && (messages_to_print[mm-1]!='\n'))
 	  child_out << '\n';
-	child_out << "Time: " << elapsed << char(-65) ;
+	child_out << "Time: " << elapsed << "ÿ" ;
 	child_out.close();
 	// cerr << "Child sending signal to " << parent_id << '\n';
 	/* Wait for a signal to arrive. */
 	sigprocmask (SIG_BLOCK, &mask, &oldmask);
 	signal_child=false;
 #ifndef WIN32
-#ifdef SIGNALDBG
-        cerr << "Child sends SIGUSR1 to parent" << '\n';
-#endif
 	kill(parent_id,SIGUSR1);
 #endif
       }
     }
-#ifdef SIGNALDBG
-    cerr << "Forked " << parent_id << " to " << child_id << '\n';
-#endif
+    // cerr << "Forking " << parent_id << " " << child_id << '\n';
     return child_id;
+#endif // HAVE_NO_SIGNAL_H
   }
 
   static void archive_write_error(){
@@ -4207,7 +4066,7 @@ extern "C" void Sleep(unsigned int miliSecond);
   }
   
   // return true if entree has been sent to evalation by child process
-  static bool child_eval(const string & entree,bool numeric,bool is_run_file,GIAC_CONTEXT){
+  static bool child_eval(const string & entree,bool numeric,bool is_run_file){
 #if defined(HAVE_NO_SIGNAL_H) || defined(DONT_FORK)
     return false;
 #else
@@ -4215,9 +4074,9 @@ extern "C" void Sleep(unsigned int miliSecond);
       history_begin_level=0;
     // added signal re-mapping because PARI seems to mess signal on the ipaq
     signal(SIGUSR1,data_signal_handler);
-    signal(SIGUSR2,intermediate_signal_handler);
+    signal(SIGUSR2,plot_signal_handler);
     if (!child_id)
-      child_id=make_child(contextptr);
+      child_id=make_child();
     if (child_busy || data_ready)
       return false;
     gen entr;
@@ -4280,17 +4139,17 @@ extern "C" void Sleep(unsigned int miliSecond);
 #endif /// HAVE_NO_SIGNAL_H
   }
 
-  static bool child_reeval(int history_begin_level,GIAC_CONTEXT){
+  static bool child_reeval(int history_begin_level){
 #if defined(HAVE_NO_SIGNAL_H) || defined(DONT_FORK)
     return false;
 #else
     signal(SIGUSR1,data_signal_handler);
-    signal(SIGUSR2,intermediate_signal_handler);
+    signal(SIGUSR2,plot_signal_handler);
     if (!child_id)
-      child_id=make_child(contextptr);
+      child_id=make_child();
     if (child_busy || data_ready)
       return false;
-    string messages_to_print="";
+    messages_to_print="";
     try {
       ofstream parent_out(cas_entree_name().c_str());
       parent_out << rpn_mode(context0) << " " << global_window_ymin << " " << -1-history_begin_level << " " << synchronize_history << '\n';
@@ -4390,7 +4249,7 @@ extern "C" void Sleep(unsigned int miliSecond);
   }
 
   static const unary_function_eval * parent_evalonly_sommets_alias[]={*(const unary_function_eval **) &at_widget_size,*(const unary_function_eval **) &at_keyboard,*(const unary_function_eval **) &at_current_sheet,*(const unary_function_eval **) &at_Row,*(const unary_function_eval **) &at_Col,0};
-  static const unary_function_ptr * parent_evalonly_sommets=(const unary_function_ptr *) parent_evalonly_sommets_alias;
+  static const unary_function_ptr & parent_evalonly_sommets=(const unary_function_ptr *) parent_evalonly_sommets_alias;
   static bool update_data(gen & entree,gen & sortie,GIAC_CONTEXT){
     // if (entree.type==_IDNT)
     //   entree=symbolic(at_sto,makevecteur(sortie,entree));
@@ -4431,7 +4290,7 @@ extern "C" void Sleep(unsigned int miliSecond);
 	if (sortie._SYMBptr->sommet==at_sto && sortie._SYMBptr->feuille.type==_VECT){
 	  vecteur & v=*sortie._SYMBptr->feuille._VECTptr;
 	  // cerr << v << '\n';
-	  if ((v.size()==2) && v[1].type==_IDNT && v[1]._IDNTptr->ref_count_ptr!=(int*)-1){
+	  if ((v.size()==2) && (v[1].type==_IDNT)){
 	    if (v[1]._IDNTptr->value)
 	      delete v[1]._IDNTptr->value;
 	    v[1]._IDNTptr->value = new gen(v[0]);
@@ -4441,7 +4300,7 @@ extern "C" void Sleep(unsigned int miliSecond);
 	}
 	if (sortie._SYMBptr->sommet==at_purge){
 	  gen & g=sortie._SYMBptr->feuille;
-	  if (g.type==_IDNT && (g._IDNTptr->value) && g._IDNTptr->ref_count_ptr!=(int *) -1){
+	  if ((g.type==_IDNT) && (g._IDNTptr->value) ){
 	    delete g._IDNTptr->value;
 	    g._IDNTptr->value=0;
 	  }
@@ -4478,7 +4337,6 @@ extern "C" void Sleep(unsigned int miliSecond);
 	  }
 	}
       }
-#if 0
       if (entree.type==_SYMB && entree._SYMBptr->sommet==at_signal && sortie.type==_SYMB && equalposcomp(parent_evalonly_sommets,sortie._SYMBptr->sommet) ) {
 	gen res=sortie.eval(1,contextptr);
 	ofstream parent_out(cas_entree_name().c_str());
@@ -4487,7 +4345,6 @@ extern "C" void Sleep(unsigned int miliSecond);
 	signal_child_ok();	
 	return false;
       }
-#endif
     } // end signal_plot_parent
     // cerr << "# Parse time" << double(end-start)/CLOCKS_PER_SEC << '\n';
     // see if it's a PICT update
@@ -4505,7 +4362,7 @@ extern "C" void Sleep(unsigned int miliSecond);
       }
       else {
 	if (entree.type==_FUNC){
-	  int s=giacmin(giacmax(entree.subtype,0),(int)history_out(contextptr).size());
+	  int s=min(max(entree.subtype,0),(int)history_out(contextptr).size());
 	  vecteur v(s);
 	  for (int k=s-1;k>=0;--k){
 	    v[k]=history_out(contextptr).back();
@@ -4593,7 +4450,7 @@ extern "C" void Sleep(unsigned int miliSecond);
       entree=unarchive(parent_in,contextptr);
       sortie=unarchive(parent_in,contextptr);
       end = CLOCK();
-      parent_in.getline(buf,BUFFER_SIZE,char(-65));
+      parent_in.getline(buf,BUFFER_SIZE,'¿');
       if (buf[0]=='\n')
 	message += (buf+1);
       else
@@ -4607,148 +4464,7 @@ extern "C" void Sleep(unsigned int miliSecond);
     }
     return update_data(entree,sortie,contextptr);
   }
-
-  gen _fork_timeout(const gen & args,GIAC_CONTEXT){
-    signal(SIGUSR1,SIG_IGN);    
-    // cerr << "fork_timeout step 1\n";
-    if (args.type==_INT_){
-      int n=args.val;
-      forkmaxleafsize=giacmin(giacmax(n,16),65536);
-      return forkmaxleafsize;
-    }
-    if (args.type==_VECT && args._VECTptr->empty())
-      return forkmaxleafsize;
-    if (args.type!=_VECT || args._VECTptr->size()<2)
-      return gensizeerr(contextptr);
-    gen entr=args._VECTptr->front();
-    int ta=taille(entr,RAND_MAX);
-    if (ta>=forkmaxleafsize){
-      CERR << "Maxleafsize exceeded " << ta << ">=" << forkmaxleafsize << "\nYou can change maxleafsize by running fork_timeout(n) with a larger value of n\n";
-      return undef;
-    }
-    // cerr << "fork_timeout step 2\n";
-    gen tout=evalf((*args._VECTptr)[1],1,contextptr);
-    bool killchild=false;
-    // fork_timeout(expression,dt,1) will not kill the child if it already exists, this is faster *but* the context/variables from parent are not copied
-    if (args._VECTptr->size()==3)
-      killchild=is_zero(args._VECTptr->back());
-    if (tout.type!=_DOUBLE_)
-      return gensizeerr(contextptr);
-    double dt=tout._DOUBLE_val;
-    if (dt<1e-3)
-      return gensizeerr("Invalid timeout, should be at least 1e-3");
-    // fork every time now, maybe improved by sending context to child
-    if (killchild || child_busy || data_ready){
-      if (child_id>1){
-        kill(child_id,SIGKILL);
-        usleep(1);
-      }
-      child_id=1;
-      child_busy=data_ready=false;
-    }
-    // cerr << "fork_timeout step 3\n";
-    if (child_id<=1)
-      child_id=make_child(contextptr);
-    // signal(SIGUSR2,intermediate_signal_handler);
-    // cerr << "fork_timeout step 4\n";
-    try {
-      ofstream parent_out(cas_entree_name().c_str());
-      archive(parent_out,entr,contextptr);
-      if (!parent_out)
-	setsizeerr();
-      parent_out.close();
-      if (!parent_out)
-	setsizeerr();
-    } catch (std::runtime_error & e){
-      last_evaled_argptr(contextptr)=NULL;
-      archive_write_error();
-      return gensizeerr("Fork_timeout; archive write error");
-    }
-    // cerr << "fork_timeout step 5\n";
-    CLOCK_T start, end;
-    start = CLOCK();
-#ifdef HAVE_LIBPTHREAD
-    pthread_mutex_lock(&fork_mutex);
-    child_busy=true;
-    pthread_mutex_unlock(&fork_mutex);
-#else
-    child_busy=true;
-#endif
-    signal(SIGUSR1,data_signal_handler);    
-#ifdef SIGNALDBG
-    cerr << "Sending SIGUSR1 to " << child_id << '\n';
-#endif
-    kill(child_id,SIGUSR1);
-    // now wait for timeout or signal
-    gen g_in=entr,g_out; string msg; int N=dt/1e-3;
-    double debut=realtime();
-    for (;;){
-#if 0 // def SIGNALDBG
-      CERR << "data_ready " << data_ready << " child_busy " << child_busy << "\n";
-#endif
-#ifdef HAVE_LIBPTHREAD
-      pthread_mutex_lock(&fork_mutex);
-      bool b=!data_ready || child_busy;
-      pthread_mutex_unlock(&fork_mutex);
-#else
-      bool b=!data_ready || child_busy;
-#endif
-      if (b){
-        usleep(1);
-        double cur=realtime()-debut;
-#if 0 // def SIGNALDBG
-        CERR << "Waiting for " << cur << "\n";
-#endif
-        if (cur>dt){
-          CERR << "Timeout\n";
-          kill(child_id,SIGKILL);
-          usleep(10);
-          child_id=1;
-          g_out=string2gen("timeout",false);
-#ifdef HAVE_LIBPTHREAD
-          pthread_mutex_lock(&fork_mutex);
-          child_busy=data_ready=false;
-          pthread_mutex_unlock(&fork_mutex);
-#else
-          child_busy=data_ready=false;
-#endif
-          break;
-        }
-        continue;
-      }
-#ifdef SIGNALDBG
-      CERR << "Data ready\n";
-#endif
-      string message="";
-      try {
-        ifstream parent_in(cas_sortie_name().c_str());
-        if (!parent_in)
-          setsizeerr();
-        g_in=unarchive(parent_in,contextptr);
-        g_out=unarchive(parent_in,contextptr);
-        parent_in.getline(buf,BUFFER_SIZE,char(-65));
-        if (buf[0]=='\n')
-          message += (buf+1);
-        else
-          message += buf;
-        if (!parent_in)
-          setsizeerr();
-        // FIXME: at the end of icas, remove \#cas*
-      } catch (std::runtime_error & err){
-        last_evaled_argptr(contextptr)=NULL;
-        archive_read_error();
-        g_out=string2gen(err.what(),false);
-      }
-      break;
-    }
-    // cerr << "# Save time" << double(end-start)/CLOCKS_PER_SEC << '\n';
-    return g_out;
-  }
-  static const char _fork_timeout_s []="fork_timeout";
-  static define_unary_function_eval_quoted (__fork_timeout,&_fork_timeout,_fork_timeout_s);
-  define_unary_function_ptr5( at_fork_timeout ,alias_at_fork_timeout,&__fork_timeout,_QUOTE_ARGUMENTS,true);
-  
-#endif // HAVE_SIGNAL_H_OLD || HAVE_SIGNAL_H
+#endif // HAVE_SIGNAL_H_OLD
 
   string home_directory(){
     string s("/");
@@ -4779,44 +4495,24 @@ extern "C" void Sleep(unsigned int miliSecond);
   }
 
 #ifndef FXCG
-
-#if defined HAVE_SYS_TYPES_H && defined HAVE_UNISTD_H
-  string tmpfs(){
-    static string tmpfs="";
-    if (tmpfs.size()==0){
-      int id=getuid();
-      if (id>0){ // Debian tmpfs
-        tmpfs="/run/user/"+print_INT_(id)+"/";
-        if (!is_file_available(tmpfs.c_str()))
-          tmpfs="/tmp/";
-      }
-      else
-        tmpfs="/tmp/";
-    }
-    return tmpfs;    
-  }
-#else
-  string tmpfs(){
-    return "/tmp/";
-  }
-#endif
-
   string cas_entree_name(){
     if (getenv("XCAS_TMP"))
       return getenv("XCAS_TMP")+("/#cas_entree#"+print_INT_(parent_id));
-    string tmp=tmpfs();
-    if (tmp=="/tmp/")
-      tmp=home_directory();
-    return tmp+"#cas_entree#"+print_INT_(parent_id);
+#ifdef IPAQ
+    return "/tmp/#cas_entree#"+print_INT_(parent_id);
+#else
+    return home_directory()+"#cas_entree#"+print_INT_(parent_id);
+#endif
   }
 
   string cas_sortie_name(){
     if (getenv("XCAS_TMP"))
       return getenv("XCAS_TMP")+("/#cas_sortie#"+print_INT_(parent_id));
-    string tmp=tmpfs();
-    if (tmp=="/tmp/")
-      tmp=home_directory();
-    return tmp+"#cas_sortie#"+print_INT_(parent_id);
+#ifdef IPAQ
+    return "/tmp/#cas_sortie#"+print_INT_(parent_id);
+#else
+    return home_directory()+"#cas_sortie#"+print_INT_(parent_id);
+#endif
   }
 #endif
   
@@ -4879,12 +4575,8 @@ extern "C" void Sleep(unsigned int miliSecond);
       s=giac_aide_location;
       s=s.substr(0,s.size()-8);
 #endif
-      if (s.size()){
-        if (s[s.size()-1]=='/')
-          read_config(s+"xcas.rc",contextptr,verbose);
-        else
-          read_config(s+"/xcas.rc",contextptr,verbose);
-      }
+      if (s.size())
+	read_config(s+"/xcas.rc",contextptr,verbose);
       s=home_directory();
       if (s.size()<2)
 	s="";
@@ -4921,17 +4613,9 @@ extern "C" void Sleep(unsigned int miliSecond);
       return "/Applications/usr/share/giac/";
     return "/Applications/usr/share/giac/";
 #endif
-#if defined WIN32 // check for default install path
-#ifdef MINGW
-    string ns("c:\\xcaswin\\");
-#else
-    string ns("/cygdrive/c/xcas/");
+#if defined WIN32 && !defined MINGW
+    return "/cygdrive/c/xcas/";
 #endif
-    if (!access((ns+"aide_cas").c_str(),R_OK)){
-      CERR << "// Giac share root-directory:" << ns << '\n';
-      return ns;
-    }
-#endif // WIN32
     string s(giac_aide_location); // ".../aide_cas"
     // test if aide_cas is there, if not test at xcasroot() return ""
     if (!access(s.c_str(),R_OK)){
@@ -5025,16 +4709,11 @@ extern "C" void Sleep(unsigned int miliSecond);
 #if defined MINGW32 && defined GIAC_GGB
     return true;
 #else
-    FILE * f =fopen(ch,"r");
-    if (f){
-      fclose(f);
-      return true;
-    }
-    return false;
-    //if (access(ch,R_OK)) return false;
+    if (access(ch,R_OK))
+      return false;
 #endif
 #endif
-    return false;
+    return true;
   }
 
   bool file_not_available(const char * ch){
@@ -5090,7 +4769,7 @@ extern "C" void Sleep(unsigned int miliSecond);
     string file=orig_file;
     string s;
     bool url=false;
-    if (file.size()>=4 && file.substr(0,4)=="http" || file.substr(0,4)=="mail"){
+    if (file.substr(0,4)=="http"){
       url=true;
       s="'"+file+"'";
     }
@@ -5193,14 +4872,10 @@ extern "C" void Sleep(unsigned int miliSecond);
       browser="mozilla";
       if (!access("/usr/bin/dillo",R_OK))
 	browser="dillo";
-      if (!access("/usr/bin/xdg-open",R_OK))
-        browser="xdg-open";
       if (!access("/usr/bin/chromium",R_OK))
 	browser="chromium";
       if (!access("/usr/bin/firefox",R_OK))
 	browser="firefox";
-      if (!access("/usr/bin/open",R_OK))
-	browser="open";
 #endif
     }
     // find binary name
@@ -5212,9 +4887,7 @@ extern "C" void Sleep(unsigned int miliSecond);
     ++i;
     string browsersub=browser.substr(i,bs-i);
     if (s[0]!='\'') s='\''+s+'\'';
-    if (browsersub=="mozilla" || browsersub=="mozilla-bin"
-        //|| browsersub=="firefox"
-        || browsersub=="chromium"){
+    if (browsersub=="mozilla" || browsersub=="mozilla-bin" || browsersub=="firefox" || browsersub=="chromium"){
       s="if ! "+browser+" -remote \"openurl("+s+")\" ; then "+browser+" "+s+" & fi &";
     }
     else
@@ -5227,32 +4900,22 @@ extern "C" void Sleep(unsigned int miliSecond);
   }
 
   bool system_browser_command(const string & file){
-#ifdef EMCC2
-    EM_ASM_ARGS({
-        var url=UTF8ToString($0);
-        console.log('system_browser_command',url);
-        window.open(url, '_blank').focus();
-      },file.c_str());
-    return true;
-#endif
 #if defined BESTA_OS || defined POCKETCAS
     return false;
 #else
 #ifdef WIN32
     string res=file;
-    if (file.size()>4 && file.substr(0,4)!="http" && file.substr(0,4)!="file" && file.substr(0,4)!="mail"){
+    if (file.size()>4 && file.substr(0,4)!="http" && file.substr(0,4)!="file"){
       if (res[0]!='/')
 	res=giac_aide_dir()+res;
-      if (file.substr(0,4)!="xcas" && file.substr(0,8)!="doc/xcas"){
-        // Remove # trailing part of URL
-        int ss=int(res.size());
-        for (--ss;ss>0;--ss){
-          if (res[ss]=='#' || res[ss]=='.' || res[ss]=='/' )
-            break;
-        }
-        if (ss && res[ss]!='.')
-          res=res.substr(0,ss);
+      // Remove # trailing part of URL
+      int ss=int(res.size());
+      for (--ss;ss>0;--ss){
+	if (res[ss]=='#' || res[ss]=='.' || res[ss]=='/' )
+	  break;
       }
+      if (ss && res[ss]!='.')
+	res=res.substr(0,ss);
       CERR << res << '\n';
 #if !defined VISUALC && !defined __MINGW_H && !defined NSPIRE && !defined FXCG
       /* If we have a POSIX path list, convert to win32 path list */
@@ -5278,7 +4941,7 @@ extern "C" void Sleep(unsigned int miliSecond);
 #ifdef __MINGW_H
     while (res.size()>=2 && res.substr(0,2)=="./")
       res=res.substr(2,res.size()-2);
-    if (res.size()<4 || (res.substr(0,4)!="http" && res.substr(0,4)!="mail"))
+    if (res.size()<4 || res.substr(0,4)!="http")
       res = "file:///c:/xcaswin/"+res;
     CERR << "running open on " << res << '\n';
     //ShellExecute(NULL,"open","file:///c:/xcaswin/doc/fr/cascmd_fr/index.html",\
@@ -5459,7 +5122,7 @@ NULL,NULL,SW_SHOWNORMAL);
 	    }
 	  }
 	}
-#if !defined KHICAS && !defined SDL_KHICAS
+#ifndef KHICAS
 	CERR << "Added " << vector_aide_ptr()->size()-s << " synonyms" << '\n';
 #endif
 	sort(vector_aide_ptr()->begin(),vector_aide_ptr()->end(),alpha_order);
@@ -5534,7 +5197,7 @@ NULL,NULL,SW_SHOWNORMAL);
     language(i,contextptr);
     add_language(i,contextptr);
 #endif
-#if (defined KHICAS || defined SDL_KHICAS) && !defined NUMWORKS_SLOTBFR
+#ifdef KHICAS
     lang=i;
 #endif
     return find_doc_prefix(i);
@@ -5599,14 +5262,6 @@ NULL,NULL,SW_SHOWNORMAL);
       debug_infolevel=atoi(getenv("GIAC_DEBUG"));
       CERR << "// Setting debug_infolevel to " << debug_infolevel << '\n';
     }
-    if (getenv("GBASIS_COEFF_STRATEGY")){
-      GBASIS_COEFF_STRATEGY=atoi(getenv("GBASIS_COEFF_STRATEGY"));
-      CERR << "// Setting gbasis_coeff_strategy to " << GBASIS_COEFF_STRATEGY << '\n';
-    }
-    if (getenv("GBASIS_COEFF_MAXLOGRATIO")){
-      GBASIS_COEFF_MAXLOGRATIO=atof(getenv("GBASIS_COEFF_MAXLOGRATIO"));
-      CERR << "// Setting gbasis_coeff_maxlogratio to " << GBASIS_COEFF_MAXLOGRATIO << '\n';
-    }
     if (getenv("GIAC_PRINTPROG")){ 
       // force print of prog at parse, 256 for python compat mode print
       printprog=atoi(getenv("GIAC_PRINTPROG"));
@@ -5631,8 +5286,6 @@ NULL,NULL,SW_SHOWNORMAL);
       }
 #endif
     }
-    if (debug_infolevel)
-      cout << "LANG " << s << "\n";
     if (s.size()>=2){
       s=s.substr(0,2);
       int i=string2lang(s);
@@ -5707,7 +5360,7 @@ NULL,NULL,SW_SHOWNORMAL);
   }
 
 #ifndef RTOS_THREADX
-#if !defined BESTA_OS && !defined NSPIRE && !defined FXCG && !defined(KHICAS) && !defined SDL_KHICAS
+#if !defined BESTA_OS && !defined NSPIRE && !defined FXCG && !defined(KHICAS)
   std::map<std::string,context *> * context_names = new std::map<std::string,context *> ;
 
   context::context(const string & name) { 
@@ -5741,34 +5394,6 @@ NULL,NULL,SW_SHOWNORMAL);
     context * ptr = new context;
     *ptr->globalptr = *globalptr;
     return ptr;
-  }
-
-  void clear_context(context * ptr){
-    if (!ptr)
-      return;
-    ptr->parent=0;
-    if (ptr->history_in_ptr)
-      delete ptr->history_in_ptr;
-    if (ptr->history_out_ptr)
-      delete ptr->history_out_ptr;
-    if (ptr->history_plot_ptr)
-      delete ptr->history_plot_ptr;
-    if (ptr->quoted_global_vars)
-      delete ptr->quoted_global_vars;
-    if (ptr->rootofs)
-      delete ptr->rootofs;
-    if (ptr->globalptr)
-      delete ptr->globalptr;
-    if (ptr->tabptr)
-      delete ptr->tabptr;
-    ptr->tabptr=new sym_tab; 
-    ptr->globalcontextptr=ptr; ptr->previous=0; ptr->globalptr=new global; 
-    ptr->quoted_global_vars=new vecteur;
-    ptr->rootofs=new vecteur;
-    ptr->history_in_ptr=new vecteur;
-    ptr->history_out_ptr=new vecteur;
-    ptr->history_plot_ptr=new vecteur;
-    //init_context(ptr);
   }
 
   void init_context(context * ptr){
@@ -5889,7 +5514,7 @@ NULL,NULL,SW_SHOWNORMAL);
 	}
       }
 #ifndef RTOS_THREADX
-#if !defined BESTA_OS && !defined NSPIRE && !defined FXCG && !defined(KHICAS) && !defined SDL_KHICAS
+#if !defined BESTA_OS && !defined NSPIRE && !defined FXCG && !defined(KHICAS)
       if (context_names){
 	map<string,context *>::iterator it=context_names->begin(),itend=context_names->end();
 	for (;it!=itend;++it){
@@ -5943,7 +5568,6 @@ NULL,NULL,SW_SHOWNORMAL);
     thread_param * ptr =thread_param_ptr(contextptr);
     pthread_attr_getstacksize(&ptr->attr,&ptr->stacksize);
     ptr->stackaddr=(void *) ((uintptr_t) &ptr-ptr->stacksize);
-    ptr->stack=(size_t) &ptr;
 #ifndef __MINGW_H
     struct tms tmp1,tmp2;
     times(&tmp1);
@@ -5970,7 +5594,7 @@ NULL,NULL,SW_SHOWNORMAL);
       last_evaled_argptr(contextptr)=NULL;
     }
 #endif
-    ptr->stackaddr=0; ptr->stack=0;
+    ptr->stackaddr=0;
     thread_eval_status(0,contextptr);
     pthread_exit(0);
     return 0;
@@ -6040,14 +5664,14 @@ NULL,NULL,SW_SHOWNORMAL);
 	return 0;
       }
     }
-    if (kill_thread(contextptr)==1){
-      kill_thread(0,contextptr);
+    if (kill_thread(contextptr)){
+      kill_thread(false,contextptr);
       thread_eval_status(0,contextptr);
       clear_prog_status(contextptr);
       cleanup_context(contextptr);
       if (tp.f)
 	tp.f(string2gen("Aborted",false),tp.f_param);
-#if !defined __MINGW_H && !defined KHICAS && !defined SDL_KHICAS
+#if !defined __MINGW_H && !defined KHICAS
       *logptr(contextptr) << gettext("Thread ") << tp.eval_thread << " has been cancelled" << '\n';
 #endif
 #ifdef NO_STDEXCEPT
@@ -6113,11 +5737,11 @@ NULL,NULL,SW_SHOWNORMAL);
 	if (!eval_status)
 	  break;
 	wait_0001(contextptr);
-	if (kill_thread(contextptr)==1){
-	  kill_thread(0,contextptr);
+	if (kill_thread(contextptr)){
+	  kill_thread(false,contextptr);
 	  clear_prog_status(contextptr);
 	  cleanup_context(contextptr);
-#if !defined __MINGW_H && !defined KHICAS && !defined SDL_KHICAS
+#if !defined __MINGW_H && !defined KHICAS
 	  *logptr(contextptr) << gettext("Cancel thread ") << eval_thread << '\n';
 #endif
 #ifdef NO_STDEXCEPT
@@ -6148,7 +5772,7 @@ NULL,NULL,SW_SHOWNORMAL);
   }
 #else
 
-  bool make_thread(const gen & g,int level,const giac_callback & f,void * f_param,const context * contextptr){
+  bool make_thread(const gen & g,int level,const giac_callback & f,void * f_param,context * contextptr){
     return false;
   }
 
@@ -6271,13 +5895,13 @@ NULL,NULL,SW_SHOWNORMAL);
 		     _python_compat_(false),
 #endif
 		     _angle_mode_(0), _bounded_function_no_(0), _series_flags_(0x3),_step_infolevel_(0),_default_color_(FL_BLACK), _epsilon_(1e-12), _proba_epsilon_(1e-15),  _show_axes_(1),_spread_Row_ (-1), _spread_Col_ (-1), 
-#if (defined(EMCC) || defined(EMCC2)) && !defined SDL_KHICAS
+#if defined(EMCC) || defined(EMCC2)
 		     _logptr_(&COUT), 
 #else
 #ifdef FXCG
 		     _logptr_(0),
 #else
-#if defined KHICAS || defined SDL_KHICAS
+#ifdef KHICAS
 		     _logptr_(&os_cerr),
 #else
 		     _logptr_(&CERR),
@@ -6294,7 +5918,7 @@ NULL,NULL,SW_SHOWNORMAL);
 #endif
   { 
     _pl._i_sqrt_minus1_=1;
-#if !defined KHICAS && !defined SDL_KHICAS
+#ifndef KHICAS
     _turtle_stack_.push_back(_turtle_);
 #endif
     _debug_ptr=new debug_struct;
@@ -6378,7 +6002,7 @@ NULL,NULL,SW_SHOWNORMAL);
      _max_sum_sqrt_=g._max_sum_sqrt_;
      _max_sum_add_=g._max_sum_add_;
      _turtle_=g._turtle_;
-#if !defined KHICAS && !defined SDL_KHICAS
+#ifndef KHICAS
      _turtle_stack_=g._turtle_stack_;
 #endif
      _autoname_=g._autoname_;
@@ -7383,7 +7007,7 @@ unsigned int ConvertUTF8toUTF162 (
       sym_string_tab::const_iterator it=syms().begin(),itend=syms().end();
       for (;it!=itend;++it){
 	gen id=it->second;
-	if (id.type==_IDNT && id._IDNTptr->value && id._IDNTptr->ref_count_ptr!=(int *) -1)
+	if (id.type==_IDNT && id._IDNTptr->value)
 	  res.push_back(symb_sto(*id._IDNTptr->value,id));
       }
       unlock_syms_mutex();  
@@ -7676,8 +7300,8 @@ unsigned int ConvertUTF8toUTF162 (
   // moved from input_lexer.ll for easier debug
   const char invalid_name[]="Invalid name";
 
-#if defined USTL || defined GIAC_HAS_STO_38 || (defined KHICAS && !defined(SIMU)) || defined SDL_KHICAS
-#if defined GIAC_HAS_STO_38 || defined KHICAS || defined SDL_KHICAS
+#if defined USTL || defined GIAC_HAS_STO_38 || (defined KHICAS && !defined(SIMU))
+#if defined GIAC_HAS_STO_38 || defined KHICAS
 void update_lexer_localization(const std::vector<int> & v,std::map<std::string,std::string> &lexer_map,std::multimap<std::string,localized_string> &back_lexer_map,GIAC_CONTEXT){}
 #endif
 #else
@@ -7870,30 +7494,7 @@ void update_lexer_localization(const std::vector<int> & v,std::map<std::string,s
       return ok;
     }
 
-#if defined EMCC || defined EMCC2 || defined SIMU
-  bool cas_builtin(const char * s,GIAC_CONTEXT){
-    std::pair<charptr_gen *,charptr_gen *> p=std::equal_range(builtin_lexer_functions_begin(),builtin_lexer_functions_end(),std::pair<const char *,gen>(s,0),tri);
-    bool res=p.first!=p.second && p.first!=builtin_lexer_functions_end();
-    if (res)
-      return res;
-    gen g;
-    int token=find_or_make_symbol(s,g,0,false,contextptr);
-    if (g.type!=_IDNT)
-      return false;
-    gen evaled;
-    if (!g._IDNTptr->in_eval(1,g,evaled,contextptr,false))
-      return false;
-    //confirm("builtin?",evaled.print(contextptr).c_str());
-    return evaled.is_symb_of_sommet(at_program);
-    return res;
-  }
-#endif
-
-  bool my_isalpha(char c){
-    return (c>='a' && c<='z') || (c>='A' && c<='Z');
-  }
-
-  int find_or_make_symbol(const string & s,gen & res,void * scanner,bool check38,GIAC_CONTEXT){
+    int find_or_make_symbol(const string & s,gen & res,void * scanner,bool check38,GIAC_CONTEXT){
       int tmpo=opened_quote(contextptr);
       if (tmpo & 2)
 	check38=false;
@@ -7965,7 +7566,7 @@ void update_lexer_localization(const std::vector<int> & v,std::map<std::string,s
 #if !defined NSPIRE_NEWLIB || defined KHICAS
 	  res=0;
 	  int pos=int(p.first-builtin_lexer_functions_begin());
-#if defined KHICAS && !defined SDL_KHICAS && !defined x86_64 && !defined __ARM_ARCH_ISA_A64 && !defined __MINGW_H
+#if defined KHICAS && !defined x86_64
 	  const unary_function_ptr * at_val=*builtin_lexer_functions_[pos];
 #else
 	  size_t val=builtin_lexer_functions_[pos];
@@ -8052,7 +7653,7 @@ void update_lexer_localization(const std::vector<int> & v,std::map<std::string,s
 	      string coeff;
 	      for (++i;i<ss;++i){
 		// up to next alphabetic char
-		if (s[i]>32 && my_isalpha(s[i])){
+		if (s[i]>32 && isalpha(s[i])){
 		  --i;
 		  break;
 		}
@@ -8136,20 +7737,6 @@ void update_lexer_localization(const std::vector<int> & v,std::map<std::string,s
     return res;
   }
 
-  string replace(const string & s,char c1,const string & c2){
-    string res;
-    int l=s.size();
-    res.reserve(l);
-    const char * ch=s.c_str();
-    for (int i=0;i<l;++i,++ch){
-      if (*ch==c1)
-        res += c2;
-      else
-        res += *ch;
-    }
-    return res;
-  }
-
   static string remove_comment(const string & s,const string &pattern,bool rep){
     string res(s);
     for (;;){
@@ -8184,7 +7771,7 @@ void update_lexer_localization(const std::vector<int> & v,std::map<std::string,s
 
   void convert_python(string & cur,GIAC_CONTEXT){
     bool indexshift=array_start(contextptr); //xcas_mode(contextptr)!=0 || abs_calc_mode(contextptr)==38;
-    if (cur[0]=='_' && (cur.size()==1 || !my_isalpha(cur[1])))
+    if (cur[0]=='_' && (cur.size()==1 || !isalpha(cur[1])))
       cur[0]='@'; // python shortcut for ans(-1)
     bool instring=cur.size() && cur[0]=='"';
     int openpar=0;
@@ -8255,7 +7842,7 @@ void update_lexer_localization(const std::vector<int> & v,std::map<std::string,s
 	++pos;
 	continue;
       }
-      if (curch=='=' && openpar==0 && prevch!='>' && prevch!='<' && prevch!='!' && prevch!=':' && prevch!=';' && prevch!='=' && prevch!='+' && prevch!='-' && prevch!='*' && prevch!='/' && prevch!='%' && (pos==int(cur.size())-1 || (cur[pos+1]!='=' && cur[pos+1]!='<' && cur[pos+1]!='>'))){
+      if (curch=='=' && openpar==0 && prevch!='>' && prevch!='<' && prevch!='!' && prevch!=':' && prevch!=';' && prevch!='=' && prevch!='+' && prevch!='-' && prevch!='*' && prevch!='/' && prevch!='%' && (pos==int(cur.size())-1 || (cur[pos+1]!='=' && cur[pos+1]!='<'))){
 	cur.insert(cur.begin()+pos,':');
 	++pos;
 	continue;
@@ -8309,7 +7896,7 @@ void update_lexer_localization(const std::vector<int> & v,std::map<std::string,s
     if (posturtle>=0 && posturtle<cs){
       // add python turtle shortcuts
       static bool alertturtle=true;
-#if defined KHICAS || defined SDL_KHICAS
+#ifdef KHICAS
       cur += "fd:=forward:;bk:=backward:; rt:=right:; lt:=left:; pos:=position:; seth:=heading:;setheading:=heading:; ";
 #else
       cur += "pu:=penup:;up:=penup:; pd:=pendown:;down:=pendown:; fd:=forward:;bk:=backward:; rt:=right:; lt:=left:; pos:=position:; seth:=heading:;setheading:=heading:; reset:=efface:;";
@@ -8408,21 +7995,8 @@ void update_lexer_localization(const std::vector<int> & v,std::map<std::string,s
   // elif ...: -> elif ... then [nothing in stack]
   // try: ... except: ...
   std::string python2xcas(const std::string & s_orig,GIAC_CONTEXT){
-    if (strncmp(s_orig.c_str(),"spreadsheet[",12)==0)
-      return s_orig;
-    if (strncmp(s_orig.c_str(),"function",8)==0 || strncmp(s_orig.c_str(),"fonction",8)==0){
-      python_compat(contextptr)=0;
-      return s_orig;
-    }
     if (xcas_mode(contextptr)>0 && abs_calc_mode(contextptr)!=38)
       return s_orig;
-    if (abs_calc_mode(contextptr)==38){
-      if (s_orig.substr(0,4)=="#cas"){
-        int pos=s_orig.find("#end");
-        if (pos>0 && pos<s_orig.size())
-          return s_orig.substr(4,pos-4);
-      }
-    }
     // quick check for python-like syntax: search line ending with :
     int first=0,sss=s_orig.size();
     first=s_orig.find("maple_mode");
@@ -8454,7 +8028,7 @@ void update_lexer_localization(const std::vector<int> & v,std::map<std::string,s
       pythonmode=true;
       pythoncompat=true;
     }
-    if (s_orig[first]=='#' || (s_orig[first]=='_' && !my_isalpha(s_orig[first+1])) || s_orig.substr(first,4)=="from" || s_orig.substr(first,7)=="import " || s_orig.substr(first,4)=="def "){
+    if (s_orig[first]=='#' || (s_orig[first]=='_' && !isalpha(s_orig[first+1])) || s_orig.substr(first,4)=="from" || s_orig.substr(first,7)=="import " || s_orig.substr(first,4)=="def "){
       pythonmode=true;
       pythoncompat=true;
     }
@@ -8534,12 +8108,6 @@ void update_lexer_localization(const std::vector<int> & v,std::map<std::string,s
     res=remove_comment(res,"\"\"\"",true);
     res=remove_comment(res,"'''",true);
     res=glue_lines_backslash(res);
-    first=res.find('\t');
-    if (first>=0 && first<res.size()){
-      // replace all tabs by n spaces, n==4
-      string reptab(4,' ');
-      res=replace(res,'\t',reptab);
-    }
     vector<int_string> stack;
     string s,cur; 
     s.reserve(res.capacity());
@@ -8637,7 +8205,7 @@ void update_lexer_localization(const std::vector<int> & v,std::map<std::string,s
 	    if (p>0 && p<int(cur.size())){
 	      --p;
 	      // does cur[pos+1..p-1] look like a string?
-	      bool str=!my_isalpha(cur[q]) || !isalphan(cur[p]);
+	      bool str=!isalpha(cur[q]) || !isalphan(cur[p]);
 	      if (p && cur[p]=='.' && cur[p-1]>'9')
 		str=true;
 	      if (p-q>=minchar_for_quote_as_string(contextptr))
@@ -8696,7 +8264,7 @@ void update_lexer_localization(const std::vector<int> & v,std::map<std::string,s
 	      posmatplotlib=cur.find("pylab");
 	    int cs=int(cur.size());
 	    pythonmode=true;
-#if defined KHICAS || defined SDL_KHICAS
+#ifdef KHICAS
 	    if (
 		(posturtle<0 || posturtle>=cs) && 
 		(poscmath<0 || poscmath>=cs) && 
@@ -8768,7 +8336,7 @@ void update_lexer_localization(const std::vector<int> & v,std::map<std::string,s
       }
       if (instring){
 	*logptr(contextptr) << "Warning: multi-line strings can not be converted from Python like syntax"<<'\n';
-	return cur+'"';
+	return s_orig;
       }
       // detect : at end of line
       for (pos=int(cur.size())-1;pos>=0;--pos){

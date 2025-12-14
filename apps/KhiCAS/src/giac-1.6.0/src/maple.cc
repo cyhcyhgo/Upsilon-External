@@ -1,19 +1,5 @@
 // -*- mode:C++ ; compile-command: "g++-3.4 -I.. -I../include -g -c maple.cc  -DIN_GIAC -DHAVE_CONFIG_H" -*-
 #include "giacPCH.h"
-
-#if defined(VISUALC) || defined(__MINGW_H) || defined (FIR) || defined(FXCG) || defined(NSPIRE) || defined(__ANDROID__) || defined(NSPIRE_NEWLIB) || defined(EMCC) || defined (EMCC2) || defined(GIAC_GGB) || defined KHICAS || defined SDL_KHICAS || defined __APPLE__
-#else
-#define THREAD_TIMEOUT
-#endif
-#ifdef THREAD_TIMEOUT
-#include <chrono>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <tuple>
-#include <ctime>
-#endif
-
 /*
  *  Copyright (C) 2000,2014 B. Parisse, Institut Fourier, 38402 St Martin d'Heres
  *
@@ -48,12 +34,10 @@ using namespace std;
 #include <sys/time.h>
 #include <time.h>
 #else 
-#if defined VISUALC && !defined FREERTOS //|| defined __MINGW_H
+#if 0 // defined VISUALC || defined __MINGW_H
 
 #include <sys/timeb.h>
 #include <sys/types.h>
-#endif
-#if 0 
 #include <winsock2.h>
 
 int gettimeofday(struct timeval* t,void* timezone);
@@ -127,11 +111,6 @@ clock_t times (struct tms *__buffer) {
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_fft_complex.h>
 #include <gsl/gsl_fft_real.h>
-#include <gsl/gsl_spline.h>
-#endif
-#if defined GIAC_HAS_STO_38 || defined NSPIRE || defined NSPIRE_NEWLIB || defined FXCG || defined GIAC_GGB || defined USE_GMP_REPLACEMENTS || defined KHICAS || defined SDL_KHICAS
-#else
-#include "signalprocessing.h"
 #endif
 #ifndef HAVE_PNG_H
 #undef HAVE_LIBPNG
@@ -150,10 +129,6 @@ clock_t times (struct tms *__buffer) {
 
 #if 0 // def GIAC_HAS_STO_38
   TMillisecs PrimeGetNow();
-#endif
-
-#ifdef HP39
-#include "syscalls.h"
 #endif
 
 #ifdef KHICAS
@@ -186,28 +161,6 @@ extern "C" double millis();
 
 #if (defined(EMCC) || defined (EMCC2)) && !defined(PNACL)
 extern "C" double emcctime();
-extern "C" double emcctime(){ // requires UI.Datestart to be initialized with Date.now() in JS code
-  double res;
-#ifdef GIAC_GGB
-  static double datestart=EM_ASM_DOUBLE_V({
-      var hw=Date.now();
-      return hw;
-    });
-  res=EM_ASM_DOUBLE_V({
-      var hw=Date.now();
-      return hw;
-    })-datestart;
-#else
-  res=EM_ASM_DOUBLE_V({
-      if (typeof(UI)!=="undefined"){          
-        var hw=Date.now()-UI.Datestart;
-        return hw;
-      }
-      else return Date.now();
-    });
-#endif
-  return res;
-}
 // definition of emcctime should be added in emscripten directory src/library.js
 // search for _time definition, and return only Date.now() for _emcctime
 // otherwise time() will not work
@@ -323,41 +276,6 @@ namespace giac {
 
   gen _about(const gen & g,GIAC_CONTEXT){
     if ( g.type==_STRNG && g.subtype==-1) return  g;
-#if defined GIAC_HAS_STO_38 || defined NSPIRE || defined NSPIRE_NEWLIB || defined FXCG || defined GIAC_GGB || defined USE_GMP_REPLACEMENTS || defined KHICAS || defined SDL_KHICAS
-#else
-    /* Displaying audio/image properties, addition by L. Marohnić */
-    audio_clip *clip=audio_clip::from_gen(g);
-    rgba_image *img=rgba_image::from_gen(g);
-    if (clip!=NULL) {
-      string chd;
-      switch (clip->channel_count()) {
-        case 1: chd=gettext("mono"); break;
-        case 2: chd=gettext("stereo"); break;
-        default: break;
-      }
-      if (!chd.empty())
-        chd=" ("+chd+")";
-      *logptr(contextptr) << gettext("Bit depth") << ": " << clip->bit_depth() << "\n"
-                          << gettext("Channels") << ": " << clip->channel_count() << chd << "\n"
-                          << gettext("Sample rate") << ": " << clip->sample_rate() << "\n"
-                          << gettext("Length") << ": " << clip->length() << " " << gettext("samples") << "\n"
-                          << gettext("Duration") << ": " << clip->duration() << " " << gettext("seconds") << "\n"
-                          << gettext("Level") << ": " << clip->peak_dbfs() << " dB\n";
-      if (!clip->file_name().empty())
-        *logptr(contextptr) << gettext("Associated with file") << " '" << clip->file_name() << "'\n";
-    } else if (img!=NULL) {
-      string ctd=img->color_type_string();
-      if (!ctd.empty())
-        ctd=" ("+ctd+")";
-      *logptr(contextptr) << gettext("Width") << ": " << img->width() << " " << gettext("pixels") << "\n"
-                          << gettext("Height") << ": " << img->height() << " " << gettext("pixels") << "\n"
-                          << gettext("Bit depth") << ": 8\n"
-                          << gettext("Channels") << ": " << img->depth() << ctd << "\n";
-      if (img->is_original())
-        *logptr(contextptr) << gettext("Associated with file") << " '" << img->file_name() << "'\n";
-    }
-    /* end display audio/image properties */
-#endif
     if (g.type==_VECT)
       return apply(g,contextptr,_about);
     if (g.type==_IDNT)
@@ -494,7 +412,6 @@ namespace giac {
     intvar_counter=0;
     realvar_counter=0;
     if (args==at_solve) return 1;
-    //clear_context((context *) contextptr);
     init_context((context *) ((void *) contextptr));
     gen res= _rm_all_vars(args,contextptr);
     *logptr(contextptr) << "============== restarted ===============" << '\n';
@@ -522,58 +439,6 @@ namespace giac {
   define_unary_function_ptr5( at_restart_modes ,alias_at_restart_modes,&__restart_modes,0,T_RETURN);
 
 #ifdef KHICAS
-
-#ifdef HP39
-  void get_time(int & heure,int & minute){
-    uint32_t t = RTC_GetTicks();
-    minute = (t / 60) % 60;
-    heure = (t / (60 * 60)) % 24;
-  }
-  
-  void set_time(int heure,int minute){
-    unsigned char time[7];
-    time[0]=0x20;
-    time[1]=0x18;
-    time[2]=0x10;
-    time[3]=0x1;
-    time[4]=heure;//(heure/10)*16+heure % 10;
-    time[5]=minute; //(minute/10)*16+minute % 10;
-    time[6]=0x30;
-    RTC_SetDateTime(time);
-  }  
-
-  gen _time(const gen & a,GIAC_CONTEXT){
-    if ( a.type==_STRNG && a.subtype==-1) return  a;
-    if (a.type==_VECT && a.subtype==_SEQ__VECT){
-      if (a._VECTptr->size()==2 && a._VECTptr->front().type==_INT_ && a._VECTptr->back().type==_INT_){
-        int h=a._VECTptr->front().val;
-        h=h%24;
-        if (h<0)
-          h+=24;
-        int m=a._VECTptr->back().val;
-        m=m%60;
-        if (m<0)
-          m+=60;
-        set_time(h,m); // does not work.
-        return 1;
-      }
-      return RTC_GetTicks();
-    }
-    double delta;
-    int ntimes=1,i=0;
-    int level=eval_level(contextptr);
-    unsigned int t1, t2;
-    extern unsigned int rtc_get_tick_ms();
-    t1 = rtc_get_tick_ms();
-    //unsigned t1 = RTC_GetTicks(); // 1 tick=1 s
-    // CERR << t1 << endl;
-    eval(a,level,contextptr);
-    t2 = rtc_get_tick_ms();
-    return double(t2-t1)/1000;
-  }
-  
-#else
-  
   gen _time(const gen & a,GIAC_CONTEXT){
     if ( a.type==_STRNG && a.subtype==-1) return  a;
     if (a.type==_VECT && a.subtype==_SEQ__VECT){
@@ -614,7 +479,7 @@ namespace giac {
     }
     return 0.0;
   }
-#endif
+
 #else // KHICAS
 
 
@@ -642,10 +507,8 @@ namespace giac {
 
   gen _time(const gen & a,GIAC_CONTEXT){
     if ( a.type==_STRNG && a.subtype==-1) return  a;
-    if (a.type==_FUNC && *a._FUNCptr==at_real)
-      return realtime();
     if (a.type==_VECT && a.subtype==_SEQ__VECT){
-#if !defined GIAC_HAS_STO_38 && (defined VISUALC || defined __MINGW_H)
+#if defined VISUALC || defined __MINGW_H
     struct _timeb timebuffer;
     _ftime(&timebuffer);
     return timebuffer.time+double(timebuffer.millitm)/1000;
@@ -663,13 +526,8 @@ namespace giac {
 #endif // GIAC_GGB
 
 #if (defined(EMCC) || defined (EMCC2)) && !defined(PNACL)
-#ifdef EMCC2
-      return emcctime()/1e3;
-#else
-      return emcctime()/1e6; // should be 1e3 if using Date.now()
+      return emcctime()/1e6;
 #endif
-#endif
-      return CLOCK()*1e-6;
       return total_time(contextptr);
     }
     double delta;
@@ -707,13 +565,9 @@ namespace giac {
     // return difftime(t2,t1);
     double t1=emcctime();
     eval(a,level,contextptr);
-#ifdef EMCC2    
-    return (emcctime()-t1)/1e3;
-#else
     return (emcctime()-t1)/1e6;
 #endif
-#endif
-#if !defined GIAC_HAS_STO_38 && (defined VISUALC || defined __MINGW_H)
+#if defined VISUALC || defined __MINGW_H
     struct _timeb timebuffer0,timebuffer1;
     _ftime(&timebuffer0);
     for (;i<1000;){ // do it 10 times more
@@ -812,116 +666,11 @@ namespace giac {
     return (delta/ntimes);
 #endif
   }
-
-#ifdef THREAD_TIMEOUT
-  struct timeout_t {
-    gen * g;
-    const context * contextptr;
-    condition_variable * cv;
-  };
-
-  gen deep_freecopy(const gen & g){
-    if (g.type==_VECT){
-      vecteur v(*g._VECTptr);
-      for (int i=0;i<v.size();++i)
-        v[i]=deep_freecopy(v[i]);
-      return gen(v,g.subtype);
-    }
-    if (g.type!=_SYMB)
-      return g;
-    return symbolic(g._SYMBptr->sommet,deep_freecopy(g._SYMBptr->feuille));
-  }
-
-  void timeout_f(const timeout_t & T){
-    gen res=*T.g;//deep_freecopy(*T.g);
-    const context * ptr=T.contextptr;
-    context * contextptr=clone_context(ptr);
-    if (contextptr){
-      //cout << "timeout eval " << res << "\n";
-      try {
-        res=eval(res,1,contextptr);
-        *T.g=res;
-      } catch (std::runtime_error & err){
-        *T.g=undef;
-      }
-      //cout << "timeout evaled " << res << "\n";
-      // commented below because I don't want to see the timeout happen while context is copied, as a consequence don't write timeout(f:=...) but f:=timeout(...)
-      //*ptr->globalptr = *contextptr->globalptr;
-      //*ptr->tabptr = *contextptr->tabptr;
-      delete contextptr;
-    }
-    else
-      *T.g=undef;
-  }
-
-  void timeout_F(const timeout_t & T) {
-    //COUT << "Timeout thread " << pthread_self() << "\n";
-    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS,NULL);
-    timeout_f(T);
-    T.cv->notify_one();
-  }
-
-  gen _thread_timeout(const gen & args,GIAC_CONTEXT){
-    if (args.type!=_VECT || args._VECTptr->size()!=2)
-      return gensizeerr(contextptr);
-    gen e=args._VECTptr->front();
-    gen tout=evalf(args._VECTptr->back(),1,contextptr);
-    if (tout.type!=_DOUBLE_)
-      return gensizeerr(contextptr);
-    std::mutex m;
-    std::condition_variable cv;
-    timeout_t T={&e,contextptr,&cv};
-    std::thread t(timeout_F,T);
-    pthread_t thread=t.native_handle();
-    if (!thread)
-      return undef;
-    t.detach();
-    try {
-      std::unique_lock<std::mutex> L(m);
-      double dt=tout._DOUBLE_val;
-      if (cv.wait_for(L,dt*1s)==std::cv_status::timeout) {
-        // try to stop the thread by setting ctrl_c, but protecting the current thread to be cancelled
-        *logptr(contextptr) << "Timeout, Attempt to stop thread " << thread << "\n";
-        kill_thread(2,contextptr);
-        ctrl_c=interrupted=true;
-        if (dt>2)
-          dt=dt;
-        else
-          dt=2;
-        if (cv.wait_for(L,dt*1s)==std::cv_status::timeout) {
-          *logptr(contextptr) << "Current thread " << pthread_self() << ". ";
-          *logptr(contextptr) << "Cancelling thread " << thread << "\n";
-          *logptr(contextptr) << "Result (0 ok): " << pthread_cancel(thread) << "\n";
-        }
-        else
-          *logptr(contextptr) << "Clean cancellation of thread " << thread << "\n";
-        ctrl_c=interrupted=false;
-        kill_thread(0,contextptr);
-        return string2gen("timeout",false);
-      }
-    } catch (...){
-      e=undef;
-    }
-    return e;    
-  }
-  static const char _thread_timeout_s []="thread_timeout";
-  static define_unary_function_eval_quoted (__thread_timeout,&_thread_timeout,_thread_timeout_s);
-  define_unary_function_ptr5( at_thread_timeout ,alias_at_thread_timeout,&__thread_timeout,_QUOTE_ARGUMENTS,true);
-#endif // THREAD_TIMEOUT
-
   
 #endif // KHICAS
   static const char _time_s []="time";
   static define_unary_function_eval_quoted (__time,&_time,_time_s);
   define_unary_function_ptr5( at_time ,alias_at_time,&__time,_QUOTE_ARGUMENTS,true);
-
-  gen _has_i(const gen & g,GIAC_CONTEXT){
-    return has_i(g);
-  }
-  static const char _has_i_s []="has_i";
-  static define_unary_function_eval_quoted (__has_i,&_has_i,_has_i_s);
-  define_unary_function_ptr5( at_has_i ,alias_at_has_i,&__has_i,_QUOTE_ARGUMENTS,true);
 
   static const char _Phi_s []="Phi";
   static define_unary_function_eval (__Phi,&_euler,_Phi_s);
@@ -966,7 +715,7 @@ namespace giac {
     int s=int(v.size());
     if (s!=3 && s!=4)
       return gensizeerr();
-    if (!ckmatrix(v.front()) || !is_integral(v[1]) || !is_integral(v[2]))
+    if (!ckmatrix(v.front()) || v[1].type!=_INT_ || v[2].type!=_INT_)
       return gentypeerr();
     matrice m=*v.front()._VECTptr;
     int ml,mc;
@@ -981,7 +730,7 @@ namespace giac {
       return gensizeerr();
     gen p=m[l][c];
     int l1=0,l2=ml-1;
-    if (s==4 && is_integral(v[3])){
+    if (s==4 && v[3].type==_INT_){
       int lmin=v[3].val;
       if (lmin<0){
 	l1 = -lmin;
@@ -994,12 +743,8 @@ namespace giac {
       }
     }
     for (;l1<=l2;++l1){
-      if (l1!=l && !is_zero(m[l1][c])){
-        if (abs_calc_mode(contextptr)==38)
-          linear_combination(p,*m[l1]._VECTptr,-m[l1][c],*m[l]._VECTptr,p,1,*m[l1]._VECTptr,epsilon(contextptr));
-        else
-          linear_combination(p,*m[l1]._VECTptr,-m[l1][c],*m[l]._VECTptr,plus_one,1,*m[l1]._VECTptr,epsilon(contextptr));
-      }
+      if (l1!=l && !is_zero(m[l1][c]))
+	linear_combination(p,*m[l1]._VECTptr,-m[l1][c],*m[l]._VECTptr,plus_one,1,*m[l1]._VECTptr,epsilon(contextptr));
     }
     return m;
   }
@@ -1112,26 +857,9 @@ namespace giac {
   static define_unary_function_eval (__col,&_col,_col_s);
   define_unary_function_ptr5( at_col ,alias_at_col,&__col,0,true);
 
-  int occurences(const gen & f,const gen & x){
-    if (f==x)
-      return 1;
-    if (f.type==_SYMB)
-      return occurences(f._SYMBptr->feuille,x);
-    if (f.type!=_VECT)
-      return 0;
-    int res=0;
-    const_iterateur it=f._VECTptr->begin(),itend=f._VECTptr->end();
-    for (;it!=itend;++it)
-      res += occurences(*it,x);
-    return res;
-  }
-
   static gen count(const gen & f,const gen & v,const context * contextptr,const gen & param){
-    if (v.type!=_VECT){
-      if (param==v) // count occurences of param in f
-        return occurences(f,v);
+    if (v.type!=_VECT)
       return f(v,contextptr);
-    }
     const_iterateur it=v._VECTptr->begin(),itend=v._VECTptr->end();
     if (param==at_row){
       vecteur res;
@@ -1439,7 +1167,7 @@ namespace giac {
   // open a file, returns a FD
   gen _open(const gen & g,GIAC_CONTEXT){
     if ( g.type==_STRNG && g.subtype==-1) return  g;
-#if defined(VISUALC) || defined(__MINGW_H) || defined (FIR) || defined(FXCG) || defined(NSPIRE) || defined(__ANDROID__) || defined(NSPIRE_NEWLIB) || defined(EMCC) || defined (EMCC2) || defined(GIAC_GGB) || defined KHICAS || defined SDL_KHICAS
+#if defined(VISUALC) || defined(__MINGW_H) || defined (FIR) || defined(FXCG) || defined(NSPIRE) || defined(__ANDROID__) || defined(NSPIRE_NEWLIB) || defined(EMCC) || defined (EMCC2) || defined(GIAC_GGB) || defined KHICAS
     return gensizeerr(gettext("not implemented"));
 #else
     gen tmp=check_secure();
@@ -1490,7 +1218,7 @@ namespace giac {
     vecteur & v=*g._VECTptr;
     int s=int(v.size());
     FILE * f=0;
-#if !defined(BESTA_OS) && !defined(NSPIRE) && !defined(FXCG) && !defined(HP39)
+#if !defined(BESTA_OS) && !defined(NSPIRE) && !defined(FXCG)
     if (v[0].type==_INT_ && v[0].subtype==_INT_FD)
       f= fdopen(v[0].val,"a");
 #endif    
@@ -1522,7 +1250,7 @@ namespace giac {
   gen _close(const gen & g0,GIAC_CONTEXT){
     gen g=eval(g0,1,contextptr);
     if ( g.type==_STRNG && g.subtype==-1) return  g;
-#if !defined(VISUALC) && !defined(BESTA_OS) && !defined(__MINGW_H) && !defined(NSPIRE) && !defined(FXCG)  && !defined(HP39)
+#if !defined(VISUALC) && !defined(BESTA_OS) && !defined(__MINGW_H) && !defined(NSPIRE) && !defined(FXCG)
     if (g.type==_INT_ && g.subtype==_INT_FD){
       purgenoassume(g0,contextptr);
       close(g.val);
@@ -1784,240 +1512,8 @@ namespace giac {
   static define_unary_function_eval (__pade,&_pade,_pade_s);
   define_unary_function_ptr5( at_pade ,alias_at_pade,&__pade,0,true);
 
-  void color2rgb(const gen &c,double &r,double &g,double &b,GIAC_CONTEXT) {
-    vecteur rgbvec=*_rgb(c,contextptr)._VECTptr;
-    r=rgbvec[0].val/255.;
-    g=rgbvec[1].val/255.;
-    b=rgbvec[2].val/255.;
-  }
-
-  /* Image, color and numeric spline interpolation, addition by L.Marohnić */
-  gen fast_spline_interp(const vecteur &x,const vecteur &y,const vecteur &t,const vecteur &opts,GIAC_CONTEXT) {
-  #ifdef HAVE_LIBGSL
-    int drv=0,stype=0; // 0: natural cubic, 1: Akima, 2: Steffen
-    const_iterateur it=opts.begin(),itend=opts.end(),jt;
-    for (;it!=itend;++it) {
-      if (it->type==_STRNG) {
-        const string &s=*it->_STRNGptr;
-        if (s=="cubic") stype=0;
-        else if (s=="akima") stype=2;
-        else if (s=="steffen") stype=4;
-        else return gensizeerr(gettext("Unknown spline type"));
-      } else if (it->is_integer()) {
-        drv=it->val;
-        if (drv<0 || drv>2)
-          return gensizeerr(gettext("Expected an integer (0, 1 or 2)"));
-      } else if (*it==at_periodic)
-        if (stype<4) stype++;
-      else return gensizeerr(gettext("Invalid option"));
-    }
-    if (!is_numericv(x) || !is_numericv(y) || !is_numericv(t))
-      return gensizeerr(gettext("Data must be numeric"));
-    int n=x.size(),i;
-    if (n<3)
-      return gendimerr(gettext("Too few data points"));
-    if (x.size()!=y.size())
-      return gendimerr(contextptr);
-    double *xd=new double[n],*yd=new double[n],cur_x,last_x=-DBL_MAX;
-    for (i=0,it=x.begin(),itend=x.end(),jt=y.begin();it!=itend;++it,++jt,++i) {
-      cur_x=evalf_double(*it,1,contextptr).DOUBLE_val();
-      if (cur_x<=last_x) {
-        delete[] xd; delete[] yd;
-        return gensizeerr("x-axis data must be given in a strictly ascending order");
-      }
-      xd[i]=last_x=cur_x;
-      yd[i]=evalf_double(*jt,1,contextptr).DOUBLE_val();
-    }
-    const gsl_interp_type *T;
-    switch (stype) {
-      case 0: T=gsl_interp_cspline; break;
-      case 1: T=gsl_interp_cspline_periodic; break;
-      case 2: T=gsl_interp_akima; break;
-      case 3: T=gsl_interp_akima_periodic; break;
-    case 4: 
-#if GSL_MAJOR_VERSION>=2 && GSL_MINOR_VERSION>=2
-        T=gsl_interp_steffen;
-        break;
-#else
-        return gensizeerr(gettext("GSL version 2.2 or later is required for Steffen interpolation"));
-#endif
-      default: assert(false);
-    }
-    gsl_interp_accel *acc=gsl_interp_accel_alloc();
-    gsl_spline *sp=gsl_spline_alloc(T,n);
-    gsl_spline_init(sp,xd,yd,n);
-    vecteur ret;
-    ret.reserve(t.size());
-    double xi,yi;
-    for (it=t.begin(),itend=t.end();it!=itend;++it) {
-      xi=evalf_double(*it,1,contextptr).DOUBLE_val();
-      switch (drv) {
-      case 0:
-        yi=gsl_spline_eval(sp,xi,acc);
-        break;
-      case 1:
-        yi=gsl_spline_eval_deriv(sp,xi,acc);
-        break;
-      case 2:
-        yi=gsl_spline_eval_deriv2(sp,xi,acc);
-        break;
-      default:
-        assert(false);
-      }
-      ret.push_back(yi);
-    }
-    gsl_spline_free(sp);
-    gsl_interp_accel_free(acc);
-    return ret;
-  #else
-    return gensizeerr(gettext("GSL is required for numerical spline interpolation"));
-  #endif
-  }
-  /* interpolate at points in T on a bezier curve in XYZ space defined by the
-   * list COLORS which contains either color objects or RGB integer triples.
-   * The return value is a list of the same type objects as in COLORS.
-   * Note that outputting color objects suffers from lossy compression to RGB565!
-   */
-  gen blend_colors(const vecteur &colors,const vecteur &t,GIAC_CONTEXT) {
-    if (colors.empty() || t.empty())
-      return vecteur(0);
-    vecteur xyz,ret;
-    double r,g,b,x,y,z;
-    bool retcol=colors.front().is_integer() && colors.front().subtype==_INT_COLOR;
-    if (!retcol && (!ckmatrix(colors) || mcols(colors)!=3))
-      return gentypeerr(gettext("Expected a list of RGB triples"));
-    const_iterateur it=colors.begin(),itend=colors.end();
-    for (;it!=itend;++it) {
-      if (retcol)
-        color2rgb(*it,r,g,b,contextptr);
-      else {
-        if (!is_integer_vecteur(*(it->_VECTptr)))
-          return gentypeerr(gettext("Exepected a RGB triple"));
-        r=std::max(0.0,std::min(1.0,it->_VECTptr->at(0).val/255.));
-        g=std::max(0.0,std::min(1.0,it->_VECTptr->at(1).val/255.));
-        b=std::max(0.0,std::min(1.0,it->_VECTptr->at(2).val/255.));
-      }
-      rgb2xyz(r,g,b,x,y,z);
-      xyz.push_back(makevecteur(x,y,z));
-    }
-    ret.reserve(t.size());
-    if (xyz.size()==1)
-      return vecteur(t.size(),colors.front());
-    if (xyz.size()==2) { // interpolate linearly between two colors
-      for (it=t.begin(),itend=t.end();it!=itend;++it) {
-        vecteur xyzt=addvecteur(multvecteur(1.-*it,*xyz.front()._VECTptr),multvecteur(*it,*xyz.back()._VECTptr));
-        xyz2rgb(xyzt[0].DOUBLE_val(),xyzt[1].DOUBLE_val(),xyzt[2].DOUBLE_val(),r,g,b);
-        ret.push_back(makevecteur(r,g,b));
-      }
-    } else { // interpolate more than two colors: use bezier curve
-      identificateur tvar(" bezier_t");
-      vecteur bc=*_parameq(makesequence(_bezier(xyz,contextptr),tvar),contextptr)._VECTptr;
-      for (it=t.begin(),itend=t.end();it!=itend;++it) {
-        vecteur bct=subst(bc,tvar,evalf_double(*it,1,contextptr),false,contextptr);
-        xyz2rgb(bct[0].DOUBLE_val(),bct[1].DOUBLE_val(),bct[2].DOUBLE_val(),r,g,b);
-        ret.push_back(makevecteur(r,g,b));
-      }
-    }
-    return _apply(makesequence(retcol?at_rgb:at_round,retcol?ret:multvecteur(255,ret)),contextptr);
-  }
-  bool arg2t01(const gen &g,double &t,GIAC_CONTEXT) {
-    gen gt=evalf_double(g,1,contextptr);
-    if (gt.type!=_DOUBLE_ || !is_positive(gt,contextptr) || !is_greater(1.0,gt,contextptr))
-      return false;
-    t=gt.DOUBLE_val();
-    return true;
-  }
-  bool is_color_vecteur(const gen &g) {
-    if (g.type!=_VECT)
-      return false;
-    const_iterateur it=g._VECTptr->begin(),itend=g._VECTptr->end();
-    for (;it!=itend;++it) {
-      if (!it->is_integer() || it->subtype!=_INT_COLOR)
-        return false;
-    }
-    return true;
-  }
-  // falls back to lagrange
-  gen _interp(const gen &g,GIAC_CONTEXT) {
-    if (g.type==_STRNG && g.subtype==-1) return g;
-    if (ckmatrix(g)) // lagrange interpolation
-      return _lagrange(g,contextptr);
-    if (g.type!=_VECT || g.subtype!=_SEQ__VECT)
-      return gentypeerr(contextptr);
-    const vecteur &args=*g._VECTptr;
-    if (args.size()<2)
-      return gendimerr(contextptr);
-#if defined GIAC_HAS_STO_38 || defined NSPIRE || defined NSPIRE_NEWLIB || defined FXCG || defined GIAC_GGB || defined USE_GMP_REPLACEMENTS || defined KHICAS || defined SDL_KHICAS
-    return _lagrange(g,contextptr);
-#else
-    const gen &a=args[0],&b=args[1];
-    if (b.type==_IDNT || (args.size()>2 && args[2].type==_IDNT))
-      return _lagrange(g,contextptr);
-    // fast spline interpolation (uses GSL)
-    if (args.size()>1 && ckmatrix(a) && b.type==_VECT && mrows(*a._VECTptr)==2 && is_approx(a)) {
-      matrice A=*evalf_double(a,1,contextptr)._VECTptr;
-      vecteur B=*evalf_double(b,1,contextptr)._VECTptr;
-      return fast_spline_interp(*A[0]._VECTptr,*A[1]._VECTptr,B,vecteur(args.begin()+2,args.end()),contextptr);
-    }
-    if (args.size()>2 && a.type==_VECT && b.type==_VECT && args[2].type==_VECT)
-      return fast_spline_interp(*evalf_double(a,1,contextptr)._VECTptr,*evalf_double(b,1,contextptr)._VECTptr,
-                                *evalf_double(args[2],1,contextptr)._VECTptr,vecteur(args.begin()+3,args.end()),contextptr);
-    // color interpolation
-    if (a.is_integer() && a.subtype==_INT_COLOR) {
-      if (args.size()!=3)
-        return gendimerr(contextptr);
-      if (!b.is_integer() || b.subtype!=_INT_COLOR)
-        return _interp(gen(mergevecteur(makevecteur(b,a),vecteur(args.begin()+2,args.end())),_SEQ__VECT),contextptr);
-      return _interp(gen(mergevecteur(vecteur(1,makevecteur(a,b)),vecteur(args.begin()+2,args.end())),_SEQ__VECT),contextptr);
-    }
-    double t;
-    if (is_color_vecteur(a) || (ckmatrix(a) && mcols(*a._VECTptr)==3)) {
-      if (args.size()!=2)
-        return gendimerr(contextptr);
-      if (ckmatrix(a) && !is_integer_matrice(*a._VECTptr))
-        return gentypeerr(gettext("RGB values must be integers"));
-      int n;
-      if (b.is_integer() && (n=b.val)>=0) {
-        vecteur ls=*_linspace(makesequence(0.0,1.0,n+2),contextptr)._VECTptr;
-        return blend_colors(*a._VECTptr,vecteur(ls.begin()+1,ls.begin()+n+1),contextptr);
-      }
-      if (arg2t01(b,t,contextptr)) {
-        gen res=blend_colors(*a._VECTptr,vecteur(1,t),contextptr);
-        return res.type==_VECT && res._VECTptr->size()==1?res._VECTptr->front():gensizeerr(contextptr);
-      }
-      if (b.type!=_VECT)
-        return gentypeerr(contextptr);
-      vecteur tdbl;
-      tdbl.reserve(b._VECTptr->size());
-      const_iterateur it=b._VECTptr->begin(),itend=b._VECTptr->end();
-      for (;it!=itend;++it) {
-        if (!arg2t01(*it,t,contextptr))
-          return gentypeerr(contextptr);
-        tdbl.push_back(t);
-      }
-      return blend_colors(*a._VECTptr,tdbl,contextptr);
-    }
-    rgba_image *img=rgba_image::from_gen(a),*other=rgba_image::from_gen(b);
-    if (img!=NULL) try {
-      if (args.size()!=3)
-        return gendimerr(contextptr);
-      if (!arg2t01(args[2],t,contextptr))
-        return gensizeerr(contextptr);
-      if (other!=NULL)
-        return img->blend(*other,t); // blend two images
-      else if (b.is_integer() && b.subtype==_INT_COLOR)
-        return img->blend(b.val,t); // blend image with color
-    } catch (const std::runtime_error &err) {
-      *logptr(contextptr) << err.what() << "\n";
-      return gensizeerr(contextptr);
-    }
-    // lagrange interpolation fallback
-    return _lagrange(g,contextptr);
-#endif
-  }
-// end additions by LM
   static const char _interp_s []="interp";
-  static define_unary_function_eval (__interp,&_interp,_interp_s);
+  static define_unary_function_eval (__interp,&_lagrange,_interp_s);
   define_unary_function_ptr5( at_interp ,alias_at_interp,&__interp,0,true);
 
   static gen lhsrhs(const gen & g,int i){
@@ -2364,7 +1860,6 @@ namespace giac {
     }
   }
 
-#if defined KHICAS || defined SDL_KHICAS
   bool read_audio(vecteur & v,int & channels,int & sample_rate,int & bits_per_sample,unsigned int & data_size){
     convert_double_int(v);
     if (v.size()>1 && v[1].type!=_VECT)
@@ -2503,8 +1998,6 @@ namespace giac {
 #else
 #if !defined GIAC_GGB && (defined EMCC || defined (EMCC2))// must have EM_ASM code javascript inlined (emscripten 1.30.4 at least?)
 #include <emscripten.h>
-  gen _readwav(const gen & g,GIAC_CONTEXT);
-  gen _writewav(const gen & g,GIAC_CONTEXT);
   gen _playsnd(const gen & args,GIAC_CONTEXT){
     if (args.type==_STRNG){
       if (args.subtype==-1) return  args;
@@ -2804,7 +2297,6 @@ namespace giac {
   define_unary_function_ptr5( at_writewav ,alias_at_writewav,&__writewav,0,true);
 
 #endif // RTOS_THREADX
-#endif
 
   static gen animate2d3d(const gen & g,bool dim3,GIAC_CONTEXT){
     int s=0,frames=10;
@@ -2871,19 +2363,6 @@ namespace giac {
 
 #ifdef HAVE_LIBPNG
   int write_png(const char *file_name, void *rows_, int w, int h, int colortype, int bitdepth){
-#ifdef __APPLE__
-    if (file_name[0]!='/'){
-      // detect relative path to /, redirect to Documents
-      char * path=getcwd(0,0);
-      if (!strcmp(path,"/") && getenv("HOME")){
-        string p(getenv("HOME")); p+="/Pictures/";
-        free(path);
-        p+=file_name;
-        return write_png(p.c_str(),rows_,w,h,colortype,bitdepth);
-      }
-      free(path);
-    }
-#endif
     png_bytep * rows=(png_bytep *) rows_;
     png_structp png_ptr;
     png_infop info_ptr;
@@ -2983,40 +2462,9 @@ namespace giac {
 #endif // LIBPNG
 
   gen _writergb(const gen & g,GIAC_CONTEXT){
-    if ( g.type==_STRNG && g.subtype==-1) return g;
-    if (g.type!=_VECT || g.subtype!=_SEQ__VECT || g._VECTptr->size()!=2 || g._VECTptr->front().type!=_STRNG)
-      return gensizeerr(contextptr);
+    if ( g.type==_STRNG && g.subtype==-1) return  g;
     vecteur v(gen2vecteur(g));
-#if defined GIAC_HAS_STO_38 || defined NSPIRE || defined NSPIRE_NEWLIB || defined FXCG || defined GIAC_GGB || defined USE_GMP_REPLACEMENTS || defined KHICAS || defined SDL_KHICAS || defined EMCC || defined EMCC2
-#else
-    rgba_image *img=rgba_image::from_gen(v[1]);
-    if (img!=NULL) {
-      int res=img->write_png(v[0]._STRNGptr->c_str());
-      switch (res) {
-      case 0: // writing was successful
-        break;
-      case 1:
-        *logptr(contextptr) << gettext("Error") << ": " << gettext("PNG library not found") << "\n";
-        return 0;
-      case 2:
-        *logptr(contextptr) << gettext("Error") << ": " << gettext("Failed to open file for writing") << "\n";
-        return 0;
-      case 3:
-        *logptr(contextptr) << gettext("Error") << ": " << gettext("Failed to create PNG write struct") << "\n";
-        return 0;
-      case 4:
-        *logptr(contextptr) << gettext("Error") << ": " << gettext("Failed to create PNG info struct") << "\n";
-        return 0;
-      case 5:
-        *logptr(contextptr) << gettext("Error") << ": " << gettext("Invalid PNG color type") << "\n";
-        return 0;
-      default:
-        return 0; // should be unreachable
-      }
-      return 1;
-    }
-#endif
-    if (v.size()>=2 && ckmatrix(v[1])){
+    if (ckmatrix(v[1])){
       int l,c;
       mdims(*v[1]._VECTptr,l,c);
       vecteur w(1,makevecteur(v.size()==2?1:4,c,l));
@@ -3027,7 +2475,7 @@ namespace giac {
       }
       v=makevecteur(v[0],w);
     }
-    if (v.size()<2 || v[0].type!=_STRNG || v[1].type!=_VECT)
+    if (v.size()!=2 || v[0].type!=_STRNG || v[1].type!=_VECT)
       return gensizeerr();
     vecteur w=*v[1]._VECTptr;
     // w[0]==[d,w,h], w[1..4]=data
@@ -3791,11 +3239,7 @@ namespace giac {
 #if 1 // def NSPIRE
     gen_map m;
 #else
-#ifdef CPP11
-    gen_map m(islessthanf);
-#else
     gen_map m(ptr_fun(islessthanf));
-#endif
 #endif
     int s=int(args.size());
     vector<int> indexbegin,indexsize;
@@ -4626,7 +4070,7 @@ namespace giac {
   static define_unary_function_eval_quoted (__cprint,&_cprint,_cprint_s);
   define_unary_function_ptr5( at_cprint ,alias_at_cprint,&__cprint,_QUOTE_ARGUMENTS,true);
 
-#if !defined GIAC_HAS_STO_38 && !defined NSPIRE && !defined FXCG && !defined POCKETCAS  && !defined(HP39)
+#if !defined GIAC_HAS_STO_38 && !defined NSPIRE && !defined FXCG && !defined POCKETCAS
   int cpp_write_compile(const string & filename,const string & funcname,const string &s,GIAC_CONTEXT){
     ofstream of(filename.c_str());
 #ifdef __APPLE__

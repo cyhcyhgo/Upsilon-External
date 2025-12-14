@@ -105,14 +105,9 @@ namespace giac {
     int reinject_begin;
     int reinject_end;
     int reinject_for_calc;
-    bool interred;
-    bool gbasis; // for rur return gbasis too
-    bool rawcoeffs; // if true keep raw coeffs in transform matrix, if false try to reduce the degree
-    int buchberger_select_strategy; // for gbasis with coeffs, -1: default value system will set 0 (#var>8) or 1 (#var<=8) , 0: select spair minimizing coeffs degree 1: select first spair with smallest total degree, 2: coeffs+Buchberger with F4 first (not active)
-    std::vector<int> initsep; // separating variable (integer coeffs of monomials)
   };
   extern int rur_separate_max_tries;
-  vectpoly gbasis(const vectpoly & v,const gen & order,bool with_cocoa,int modular,environment * env,int & rur,GIAC_CONTEXT,gbasis_param_t gbasis_param,std::vector< vectpoly> * coeffsptr=0); // with_f5 is in fact modular_check
+  vectpoly gbasis(const vectpoly & v,const gen & order,bool with_cocoa,bool with_f5,int & rur,environment * env,GIAC_CONTEXT,gbasis_param_t gbasis_param); // with_f5 is in fact modular_check
   gen remove_equal(const gen & f);
   vecteur remove_equal(const_iterateur it,const_iterateur itend);
   vecteur gsolve(const vecteur & eq_orig,const vecteur & var,bool complexmode,int evalf_after,GIAC_CONTEXT);
@@ -160,20 +155,6 @@ namespace giac {
   // returns an error or the vecteur of coordinates of variables
   // and sets min_value to f at this point
   gen fmin_cobyla(const gen & f,const vecteur & constraints,const vecteur & variables,const vecteur & guess,const gen & eps0,const gen & maxiter0,GIAC_CONTEXT);
-  // gen-context struct (moved from solve.cc by L. Marohnić)
-  typedef struct gen_context {
-    gen g; //  should be a vector [function,conditions,variables]
-    const context * contextptr;
-  } cobyla_gc;
-  // minimize F subject to CON. (added by L. Marohnić)
-  // F: the expression to be minimized
-  // CON: list of expressions that must be positive for feasibility
-  // X: list of variables
-  // X0: on input, initial point; on output, the last obtained point
-  // MAXITER: on input, maximum allowed number of function evaluations; on output, the total number of evaluations
-  // EPS: tolerance, a positive number
-  // MSG: verbosity level for COBYLA algorithm; from 0 (no output) to 3 (full output)
-  int giac_cobyla(cobyla_gc *gc,vecteur &x0,int &maxiter,double eps=1e-8,int msg=0);
 
 #ifndef NO_NAMESPACE_GIAC
 } // namespace giac

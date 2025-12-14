@@ -187,9 +187,7 @@ namespace giac {
       gen expm1=exponent+gen(-1);
       if (is_zero(dexponent))
 	return exponent*dbase*pow(base,expm1,contextptr);
-      // changed 2024/11/06 for later simplify, was
-      // return dexponent*ln(base,contextptr)*s+exponent*dbase*pow(base,expm1,contextptr);
-      return (dexponent*ln(base,contextptr)+exponent*dbase/base)*s;
+      return dexponent*ln(base,contextptr)*s+exponent*dbase*pow(base,expm1,contextptr);
     }
     if (s.sommet==at_inv){
       if (step_infolevel(contextptr)>1)
@@ -519,8 +517,6 @@ namespace giac {
   }
 
   gen derive(const gen & e,const identificateur & i,GIAC_CONTEXT){
-    if (is_undef(e) || is_inequation(e))
-      return undef;
     if (abs_calc_mode(contextptr)==38 && i.id_name[0]>='A' && i.id_name[0]<='Z'){
       identificateur tmp("xdiff");
       gen ee=subst(e,i,tmp,true,contextptr);
@@ -548,7 +544,7 @@ namespace giac {
       return res;
     }
     case _FRAC:
-      return fraction(derive(e._FRACptr->num,i,contextptr)*e._FRACptr->den-(e._FRACptr->num)*derive(e._FRACptr->den,i,contextptr),pow(e._FRACptr->den,2,contextptr));
+      return fraction(derive(e._FRACptr->num,i,contextptr)*e._FRACptr->den-(e._FRACptr->num)*derive(e._FRACptr->den,i,contextptr),e._FRACptr->den);
     case _EXT:
       if (is_zero(derive(*(e._EXTptr+1),i,contextptr)))
 	return algebraic_EXTension(derive(*e._EXTptr,i,contextptr),*(e._EXTptr+1));
@@ -608,9 +604,7 @@ namespace giac {
       gen ecopie(e),eprime(e);
       int j=1;
       for (;j<=n;++j){
-	eprime=derive(ecopie,vars,contextptr);
-        // if (n>2)
-          eprime=ratnormal(eprime,contextptr);
+	eprime=ratnormal(derive(ecopie,vars,contextptr),contextptr);
 	if (is_undef(eprime))
 	  return eprime;
 	if ( (eprime.type==_SYMB) && (eprime._SYMBptr->sommet==at_derive))
@@ -619,8 +613,6 @@ namespace giac {
       }
       if (j==n+1)
 	return eprime;
-      if (n+1-j==1)
-        return symbolic(at_derive,gen(makevecteur(ecopie,vars),_SEQ__VECT));
       return symbolic(at_derive,gen(makevecteur(ecopie,vars,n+1-j),_SEQ__VECT));
     }
     // multi-index derivation
@@ -816,8 +808,6 @@ namespace giac {
     step_infolevel(contextptr)=savestep;
     gprintf(step_extrema1,gettext("Derivative of %gen with respect to %gen is %gen\nSolving %gen with respect to %gen answer %gen"),makevecteur(arg,var,d,deq,var,s.type==_VECT?change_subtype(s,_SEQ__VECT):s),contextptr);
     calc_mode(c,contextptr);
-    if (c==1 && s.type==_VECT) 
-      s.subtype=0;
     vecteur ls=lidnt(s);
     for (int i=0;i<int(ls.size());++i){
       if (ls[i]==var || (var.type==_VECT && equalposcomp(*var._VECTptr,ls[i])))
@@ -987,10 +977,7 @@ namespace giac {
       ndiff=g.val;
     }
     gen eq(remove_equal(args._VECTptr->front())),x((*args._VECTptr)[1]),y((*args._VECTptr)[2]);
-    gen dy=derive(eq,y,contextptr);
-    if (is_squarematrix(dy))
-      dy=mtran(*dy._VECTptr);
-    gen yprime=-inv(dy,contextptr)*derive(eq,x,contextptr);
+    gen yprime=-derive(eq,x,contextptr)/derive(eq,y,contextptr);
     if (ndiff==1)
       return yprime;
     gen yn=yprime;
@@ -1123,30 +1110,10 @@ namespace giac {
     tmp.insert(tmp.begin(),symbolic(at_ou,gen(res,_SEQ__VECT)));
     return symbolic(at_and,gen(tmp,_SEQ__VECT));
   }
-  void domain_auto_assume(const gen & f,const gen & x,GIAC_CONTEXT){
-    vecteur range;
-    find_range(x,range,contextptr);
-    if (range.size()>=1 && range.front().type==_VECT){
-      range=*range.front()._VECTptr;
-      if (range.size()==2 && range[0]==minus_inf && range[1]==plus_inf){
-	gen periode;
-	if (is_periodic(f,x,periode,contextptr)){
-	  gen hyp=symb_and(symbolic(at_superieur_egal,makesequence(x,0)),symbolic(at_inferieur_egal,makesequence(x,periode)));
-	  *logptr(contextptr) << "Periodic function. Auto assume" << hyp << "\n";
-	  giac_assume(hyp,contextptr);
-	}
-      }
-    }
-  }
   gen _domain(const gen & args,GIAC_CONTEXT){
     if (is_undef(args)) return args;
-    if (args.type!=_VECT || args.subtype!=_SEQ__VECT){
-      gen xval=assumeeval(vx_var,contextptr);
-      domain_auto_assume(args,vx_var,contextptr);
-      gen res=domain(args,vx_var,0,contextptr);
-      restorepurge(xval,vx_var,contextptr);
-      return res;
-    }
+    if (args.type!=_VECT || args.subtype!=_SEQ__VECT)
+      return domain(args,vx_var,0,contextptr);
     vecteur v=*args._VECTptr;
     if (v.size()<2)
       return gensizeerr(contextptr);
@@ -1156,11 +1123,7 @@ namespace giac {
       v.push_back(0);
     if (v[2].type!=_INT_)
       return gensizeerr(contextptr);
-    gen xval=assumeeval(vx_var,contextptr);
-    domain_auto_assume(v[0],v[1],contextptr);
-    gen res=domain(v[0],v[1],v[2].val,contextptr);
-    restorepurge(xval,vx_var,contextptr);
-    return res;
+    return domain(v[0],v[1],v[2].val,contextptr);
   }
   static const char _domain_s []="domain";
   static define_unary_function_eval (__domain,&_domain,_domain_s);

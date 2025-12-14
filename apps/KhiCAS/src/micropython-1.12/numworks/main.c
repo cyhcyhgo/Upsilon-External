@@ -308,7 +308,6 @@ void mp_keyboard_interrupt(void) {
 bool back_key_pressed();
 int getkey(int allow_suspend);
 
-double millis();
 
 int micropython_port_vm_hook_loop() {
   /* This function is called very frequently by the MicroPython engine. We grab
@@ -317,30 +316,18 @@ int micropython_port_vm_hook_loop() {
 
   /* Doing too many things here slows down Python execution quite a lot. So we
    * only do things once in a while and return as soon as possible otherwise. */
-#if 1
-  if (!back_key_pressed())
-    return 0;
-  mp_keyboard_interrupt();
-  return 1;
-#else
   static int c = 0;
+
   ++c; 
-  if (c & 0x7f ) {
+  if (c & 0x7ff ) {
     return 0;
   }
 
-  static double t = 0;
-  const int delay = 100;
-  double t2 = millis();
-  if (t2-t<delay) 
-    return 0;
-  t = t2;
   // Check if the user asked for an interruption from the keyboard
   int g=getkey(mp_interrupt_char | 0x80000000);
   if (!g) return 0;
   mp_keyboard_interrupt();
   return 1;
-#endif
 }
 
 

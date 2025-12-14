@@ -1,2 +1,0 @@
-# /bin/bash
-LD=nspire-ld CC=nspire-gcc ./configure --host=armv5tej-none-eabi --prefix=$HOME/Ndless-r2015/ndless-sdk
