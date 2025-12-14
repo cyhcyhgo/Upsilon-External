@@ -38,6 +38,10 @@ using namespace std;
 #include "lin.h"
 #include "intgab.h"
 #include "giacintl.h"
+#if defined GIAC_HAS_STO_38 || defined NSPIRE || defined NSPIRE_NEWLIB || defined FXCG || defined GIAC_GGB || defined USE_GMP_REPLACEMENTS || defined KHICAS
+#else
+#include "signalprocessing.h"
+#endif
 
 #ifndef NO_NAMESPACE_GIAC
 namespace giac {
@@ -84,7 +88,13 @@ namespace giac {
       }
       return gen(v,f0.subtype);
     }
-    gen t(s);
+    gen t(s),pt;
+#if defined GIAC_HAS_STO_38 || defined NSPIRE || defined NSPIRE_NEWLIB || defined FXCG || defined GIAC_GGB || defined USE_GMP_REPLACEMENTS || defined KHICAS || defined SDL_KHICAS 
+#else
+    // addition by L.Marohnić: support for transforming periodic functions
+    if (laplace_periodic(f0,x,s,pt,contextptr))
+      return pt;
+#endif
     if (s==x){
 #ifdef GIAC_HAS_STO_38
       t=identificateur("s38_");
@@ -353,6 +363,13 @@ namespace giac {
       return gensizeerr(contextptr);
     if (has_num_coeff(f))
       return ilaplace(exact(f,contextptr),x,s,contextptr);
+#if defined GIAC_HAS_STO_38 || defined NSPIRE || defined NSPIRE_NEWLIB || defined FXCG || defined GIAC_GGB || defined USE_GMP_REPLACEMENTS || defined KHICAS || defined SDL_KHICAS 
+#else
+    // addition by L.Marohnić: support for periodic summation
+    gen orig;
+    if (ilaplace2(f,x,s,orig,contextptr))
+      return orig;
+#endif
     gen remains,res=linear_apply(f,x,remains,0,contextptr,pf_ilaplace);
     res=subst(res,laplace_var,s,false,contextptr);
     if (!is_zero(remains))
@@ -1284,7 +1301,8 @@ namespace giac {
 	  vecteur prv=lop(lvarx(pr,y),at_ln);
 	  gen pra,prb;
 	  if (!prv.empty() && prv[0].is_symb_of_sommet(at_ln) && is_linear_wrt(pr,prv[0],pra,prb,contextptr)){
-	    pr=_lncollect(pra*(symbolic(at_ln,parameters.back()*prv[0]._SYMBptr->feuille))+prb,contextptr);
+      pr=pra*(symbolic(at_ln,parameters.back()*prv[0]._SYMBptr->feuille))+prb;
+	    pr=_lncollect(factorcollect(pr,false,contextptr),contextptr);
 	  }
 	  else
 	    pr=parameters.back()+pr;
@@ -1538,7 +1556,7 @@ namespace giac {
   static gen point2vecteur(const gen & g_,GIAC_CONTEXT){
     if (!g_.is_symb_of_sommet(at_point))
       return g_;
-    gen g=g_._SYMBptr->feuille;
+    gen g=eval(g_._SYMBptr->feuille,1,contextptr);
     gen x,y;
     if (g.type==_VECT){
       if (g._VECTptr->size()!=2)
@@ -1598,6 +1616,8 @@ namespace giac {
     if (s==2){
       if ( (v[1].type==_SYMB && v[1]._SYMBptr->sommet==at_of && v[1]._SYMBptr->feuille.type==_VECT &&v [1]._SYMBptr->feuille._VECTptr->size()==2 ) )
 	return desolve(v[0],(*v[1]._SYMBptr->feuille._VECTptr)[1],(*v[1]._SYMBptr->feuille._VECTptr)[0],ordre,parameters,contextptr);
+      if (v[1]==vx_var)
+        return _desolve(v[0],contextptr);
       return ggbputinlist(desolve( v[0],vx_var,v[1],ordre,parameters,contextptr),contextptr);
     }
     gen f;
@@ -1751,6 +1771,7 @@ namespace giac {
 	  gen res0;
 	  vecteur vnum;
 	  polynome2poly1(it->num,1,vnum);
+          vnum=mergevecteur(vecteur(mult-vnum.size(),0),vnum);
 	  for (int i=0;i<mult;++i){
 	    res0 += r2e(vnum[i],lprime,contextptr)*symbolic(at_Kronecker,s-i); // symb_when(symb_equal(s,i),1,0) will not be handled correctly by ztrans
 	  }

@@ -1,0 +1,24 @@
+API=../../api
+CC=arm-none-eabi-gcc
+OBJCOPY=arm-none-eabi-objcopy
+AR=arm-none-eabi-ar
+CFLAGS=-DNDEBUG -ggdb3 -I$(API) -Os -mcpu=cortex-m7 -mthumb -mfpu=fpv5-sp-d16 -mfloat-abi=hard -fno-common -fdata-sections -ffunction-sections -fno-exceptions -fno-strict-aliasing -fno-common -fno-threadsafe-statics -mthumb-interwork
+LDFLAGS=-Wl,-L$(API) -Wl,--gc-sections -Wl,--entry=entrypoint --specs=nano.specs -nostartfiles -Wl,-Ur -lc -lstdc++ -lm -lapi -lnosys #-flto
+
+%.o: %.cpp
+	$(CC) $(CFLAGS) -c $< -o $@
+
+OBJS = src/giac-1.6.0/src/sym2poly.o src/giac-1.6.0/src/gausspol.o src/giac-1.6.0/src/threaded.o src/giac-1.6.0/src/maple.o src/giac-1.6.0/src/ti89.o src/giac-1.6.0/src/mathml.o src/giac-1.6.0/src/moyal.o src/giac-1.6.0/src/misc.o src/giac-1.6.0/src/permu.o src/giac-1.6.0/src/desolve.o src/giac-1.6.0/src/input_parser.o src/giac-1.6.0/src/symbolic.o src/giac-1.6.0/src/index.o src/giac-1.6.0/src/modpoly.o src/giac-1.6.0/src/modfactor.o src/giac-1.6.0/src/ezgcd.o src/giac-1.6.0/src/derive.o src/giac-1.6.0/src/solve.o src/giac-1.6.0/src/intg.o src/giac-1.6.0/src/intgab.o src/giac-1.6.0/src/risch.o src/giac-1.6.0/src/lin.o src/giac-1.6.0/src/series.o src/giac-1.6.0/src/subst.o src/giac-1.6.0/src/vecteur.o src/giac-1.6.0/src/sparse.o src/giac-1.6.0/src/csturm.o src/giac-1.6.0/src/tex.o src/giac-1.6.0/src/global.o src/giac-1.6.0/src/ifactor.o src/giac-1.6.0/src/alg_ext.o src/giac-1.6.0/src/gauss.o src/giac-1.6.0/src/isom.o src/giac-1.6.0/src/help.o src/giac-1.6.0/src/plot.o src/giac-1.6.0/src/plot3d.o src/giac-1.6.0/src/rpn.o src/giac-1.6.0/src/prog.o src/giac-1.6.0/src/pari.o src/giac-1.6.0/src/cocoa.o src/giac-1.6.0/src/unary.o src/giac-1.6.0/src/usual.o src/giac-1.6.0/src/identificateur.o src/giac-1.6.0/src/gen.o src/giac-1.6.0/src/input_lexer.o src/giac-1.6.0/src/tinymt32.o src/giac-1.6.0/src/first.o src/giac-1.6.0/src/quater.o src/giac-1.6.0/src/kdisplay.o src/giac-1.6.0/src/kadd.o src/giac-1.6.0/src/k_csdk.o src/giac-1.6.0/src/qrcodegen.o
+
+
+app.elf: src/main.o $(OBJS) src/lib/libmpfi.a src/lib/libmpfr.a src/lib/libgmp.a src/lib/libmicropy.a
+	$(CC) $^ -o $@ $(CFLAGS) $(LDFLAGS)
+
+src/lib/libgmp.a src/lib/libmpfi.a src/lib/libmpfr.a src/lib/libmicropy.a src/include/gmp.h src/include/mpfi.h src/include/mpfr.h:
+	./buildDeps
+
+src/lib/libgiac.a: src/lib/libgmp.a src/lib/libmpfi.a src/lib/libmpfr.a src/include/gmp.h src/include/mpfi.h src/include/mpfr.h
+	./buildGiac
+
+clean:
+	rm -f *.elf src/*.o src/include/*.h src/lib/*.a

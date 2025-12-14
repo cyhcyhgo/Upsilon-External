@@ -3999,6 +3999,7 @@ namespace giac {
   }
 
   static vecteur ifactors1(const gen & n0,GIAC_CONTEXT){
+    // CERR << "ifactors1 " << n0 << '\n';
     if (is_greater(1e71,n0,contextptr))
       return giac_ifactors(n0,contextptr);
     if (n0.type==_VECT && !n0._VECTptr->empty())
@@ -4157,13 +4158,21 @@ namespace giac {
     if (args.type==_VECT && args.subtype==_SEQ__VECT && args._VECTptr->size()==2 ){
       gen g=args._VECTptr->front();
       gen b=args._VECTptr->back();
-      if (b==at_matrix){
+      if (b==at_matrix || b==at_prod){
 	g=_ifactors(g,contextptr);
 	if (g.type!=_VECT || g._VECTptr->size()%2)
 	  return g;
+        if (b==at_prod){
+          vecteur & v =*g._VECTptr;
+          vecteur l;
+          for (int i=0;i<v.size();i+=2){
+            l=mergevecteur(l,vecteur(v[i+1].val,v[i]));
+          }
+          return symbolic(at_prod,gen(l,_SEQ__VECT));
+        }
 	return _matrix(makesequence(g._VECTptr->size()/2,2,g),contextptr);
       }
-#ifndef EMCC
+#if !defined EMCC && defined HAVE_LIBPARI
       if (b.type==_SYMB){
 	gen res;
 	// b is assumed to be a minimal polynomial check if g is a norm 
@@ -4774,7 +4783,7 @@ namespace giac {
     else {
       // is q a power of a prime?
       double d=evalf_double(q,1,contextptr)._DOUBLE_val;
-      int maxpow=int(std::ceil(std::log(d)/std::log(3)));
+      int maxpow=int(std::ceil(std::log(d)/std::log(3.0)));
       for (int i=2;i<=maxpow;++i){
 	if ( (i>2 && i%2==0) ||
 	     (i>3 && i%3==0) ||

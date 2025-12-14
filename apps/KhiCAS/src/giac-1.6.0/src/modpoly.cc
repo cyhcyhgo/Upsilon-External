@@ -49,12 +49,17 @@ using namespace std;
 #if defined GIAC_CACHEW && GIAC_PRECOND
 #undef GIAC_PRECOND // incompatible
 #endif
+//#undef GIAC_PRECOND
 
 // vector class version 1 by Agner Fog https://github.com/vectorclass
 // this might be faster for CPU with AVX512DQ instruction set
 // (fast multiplication of Vec4q)
-#ifdef HAVE_VCL1_VECTORCLASS_H 
-#include <vcl1/vectorclass.h>
+#if defined HAVE_VCL2_VECTORCLASS_H 
+// https://github.com/vectorclass, compile with -mavx2 -mfma 
+#include <vcl2/vectorclass.h>
+#ifdef __AVX2__
+#define CPU_SIMD
+#endif
 #endif
 
 #ifndef NO_NAMESPACE_GIAC
@@ -172,6 +177,10 @@ namespace giac {
     int d=int(p.size())-1;
     new_coord.reserve(d);
     modpoly::const_iterator it=p.begin(); // itend=p.end(),
+    for (;d;++it,--d){  
+      if (!is_zero((*it)*gen(d)))                                               
+        break;                                                                  
+    }                                                                           
     for (;d;++it,--d)
       new_coord.push_back((*it)*gen(d));
     return new_coord;
@@ -1424,8 +1433,10 @@ namespace giac {
     modpoly res(a);
     iterateur it=res.begin(),itend=res.end();
     for (;it!=itend;++it){
-      if (is_integer(*it))
+      if (is_integer(*it)){
+        *it=smod(*it,m);
 	continue;
+      }
       if (it->type!=_MOD || *(it->_MODptr+1)!=m)
 	return modpoly(1,gensizeerr("Can not convert "+it->print(context0)+" mod "+m.print(context0)));
       *it=*it->_MODptr;
@@ -2218,6 +2229,8 @@ namespace giac {
     if (f.empty())
       return false;
     gen finv=f.back();
+    if (gcd(finv,env->modulo)!=1)
+      return false;
     if (f.back()!=1){
       finv=invenv(finv,env);
       if (finv.type==_FRAC)
@@ -2557,12 +2570,13 @@ namespace giac {
 	  vector<int> A,B,Wp,tmp0;
 	  to_fft(a,p,w,Wp,N,tmp0,1,false,false); A.swap(tmp0);
 	  to_fft(b,p,w,Wp,N,tmp0,1,false,false); B.swap(tmp0);
-	  fft_aoverb_p(A,B,tmp0,p);
-	  fft_reverse(Wp,p); 
-	  from_fft(tmp0,p,Wp,q,true,false);
-	  fast_trim_inplace(q,p);
-	  if (q.size()==s)
-	    return 2;
+	  if (fft_aoverb_p(A,B,tmp0,p)){
+	    fft_reverse(Wp,p); 
+	    from_fft(tmp0,p,Wp,q,true,false);
+	    fast_trim_inplace(q,p);
+	    if (q.size()==s)
+	      return 2;
+	  }
 	}
       }
     }
@@ -2889,6 +2903,7 @@ namespace giac {
 	modpoly::const_iterator itq=B_beg;
 	++itq; // first elements cancel
 	if (env && (env->moduloon && !env->complexe && is_zero(env->coeff)) && (env->modulo.type==_INT_) && (env->modulo.val<smallint)){
+          // BEWARE: this code is not valid if th or other are not reduced
 	  for (;itq!=B_end;--tmpptr,++itq){ // no mod here to save comput. time
 	    tmpptr->val -= q.val*itq->val ;
 	  }	  
@@ -3973,14 +3988,15 @@ namespace giac {
     double invp=find_invp(p);
     longlong q1=-q[0],q0=-q[1];
     ur.clear(); ur.push_back((q1*ub.front())%p);
-    const int * it=&ub[0],*itend=it-1+ub.size(),*itmid=it+ub.size()-ua.size(),*jt=&ua[0];
+    const int * it=&ub[0],*itend=it-1+ub.size(),*itmid=it+ub.size()-ua.size();
     if (ua.empty()){
       for (;it!=itend;++it){
-	ur.push_back(amodp(q0*it[0]+q1*it[1],p,invp));
+        ur.push_back(amodp(q0*it[0]+q1*it[1],p,invp));
       }
       ur.push_back(amodp(q0*it[0],p,invp));
     }
     else {
+      const int *jt=&ua[0];      
 #if 1
       itmid-=4;
       int i0=it[0],i1;
@@ -4672,7 +4688,7 @@ namespace giac {
 #ifdef GIAC_LLPRECOND
     longlong N=W.size()/2;
     fft_rev1(a+1,a+N-1,p);
-    fft_rev1(a+N+1,a+2*N-1,1);
+    fft_rev1(a+N+1,a+2*N-1,1); // last arg 1 or p??
 #else
     fft_rev1(a+1,a+W.size()-1,p);
 #endif
@@ -5535,7 +5551,7 @@ namespace giac {
 #endif
   }
 
-  void fft_aoverb_p(const vector<int> &a,const vector<int> &b,vector<int> & res,int p){
+  bool fft_aoverb_p(const vector<int> &a,const vector<int> &b,vector<int> & res,int p){
     int s=a.size();
     res.resize(s);
     for (int i=0;i<s;++i){
@@ -5543,10 +5559,13 @@ namespace giac {
 	res[i]=0;
 	continue;
       }
-      int bi=invmod(b[i],p);
+      int bi=b[i];
+      if (bi==0) return false;
+      invmod(bi,p);
       bi += (bi>>31)&p;
       res[i]=(longlong(a[i])*bi)%p;
     }
+    return true;
   }
 
   void fft_ab_cd_p(const vector<int> &a,const vector<int> &b,const vector<int> & c,const vector<int> &d,vector<int> & res,int p){
@@ -5773,10 +5792,16 @@ namespace giac {
     }
   }
 
+#ifdef GIAC_PRECOND
   inline int precond_mulmodp(unsigned A,unsigned W,unsigned Winvp,int p){
 #if 1
     longlong t = ulonglong(A)*W-((ulonglong(A)*Winvp)>>32)*p;
-    return t+ ((t>>31)&p);
+    t += ((t>>31)&p);
+    return t;
+    unsigned s=(ulonglong(A)*W)%p;
+    if (t!=s)
+      CERR << '\n';
+    return s;
 #else
     longlong t = ulonglong(A)*W-((ulonglong(A)*Winvp)>>32)*p;
     //return t- (t>>63)*p;
@@ -5787,6 +5812,11 @@ namespace giac {
     return s;
 #endif
   }
+#else
+  inline int precond_mulmodp(unsigned A,unsigned W,unsigned Winvp,int p){
+    return (ulonglong(A)*W)%p;
+  }
+#endif
 
   inline int mulmodp(int a,int b,int p){
     return (longlong(a)*b) % p;    
@@ -5822,7 +5852,7 @@ namespace giac {
     int * a=&W.front();
     int N=W.size()/2;
     fft_rev1(a+1,a+N-1,p);
-    fft_rev1(a+N+1,a+2*N-1,1);
+    fft_rev1(a+N+1,a+2*N-1,1); // last arg 1 or p??
   }
 
   void fft2wp(vector<int> & W,int n,int w,int p){
@@ -5841,7 +5871,7 @@ namespace giac {
 #else
       unsigned u=1+((1ULL<<32)*ww)/unsigned(p); // quotient ceiling
 #endif
-      W[N+i]=u; 
+      W[N+i]=u; // stored as an int but it's an unsigned 
       ww=precond_mulmodp(w,ww,u,p);
       // ww=(ww*longlong(w))%p;
       // if (www!=ww)
@@ -6782,7 +6812,7 @@ namespace giac {
 	    return true;
 	}
       }
-      env->complexe=true;
+      env->complexe=true; return false;
     }
     if (env->moduloon && !env->complexe && p.size()>=HGCD && q.size()>=HGCD){
       modpoly rem,quo;
@@ -6899,6 +6929,9 @@ namespace giac {
     memcpy(b,&*q.begin(),bs*sizeof(int));
     int * t;
     for (;b!=bend;swapab=!swapab){
+      if (*b % m==0){ // make sure leading coeff of b is not 0
+	++b; continue;
+      }
       rem(a,aend,b,bend,m,qcur,0);
       t=a; a=b; b=t;
       t=aend; aend=bend; bend=t;      
@@ -8049,6 +8082,20 @@ namespace giac {
     if ( (pt!=_INT_ && pt!=_CPLX)
 	 || (qt!=_INT_ && qt!=_CPLX) )
       return false;
+    // changed 2025 April 22 for factor(√(-5*(√(92*x^2-12*x+45)*abs(x)+(-2*√5)*x^2+(-3*√5)*x)/√5/36));
+    // get content of p and q, so that p and q are primitive
+    gen pcont=lgcd(p),qcont=lgcd(q);
+    if (1 && (pcont!=1 || qcont!=1)){
+      bool res=gcd_modular_algo(p/pcont,q/qcont,d,p_simp,q_simp);
+      if (!res) return res;
+      gen g=gcd(pcont,qcont,context0);
+      d=g*d;
+      if (p_simp)
+        *p_simp=(pcont/g)*(*p_simp);
+      if (q_simp)
+        *q_simp=(qcont/g)*(*q_simp);
+      return res;
+    }
     gen gcdfirstcoeff(gcd(p.front(),q.front(),context0));
     int gcddeg= giacmin(int(p.size()),int(q.size()))-1;
     environment env;
@@ -12278,6 +12325,7 @@ namespace giac {
 
   // inplace fft with positive representant
   static inline int addmod(int a, int b, int p) { 
+    // if (a<0 || b<0) CERR << '\n';
     int t=(a-p)+b;
 #if defined(EMCC) || defined(EMCC2)
     if (t<0) return t+p; else return t;
@@ -12287,6 +12335,7 @@ namespace giac {
 #endif
   }
   static inline int submod(int a, int b, int p) { 
+    // if (a<0 || b<0) CERR << '\n';
     int t=a-b;
 #if defined(EMCC) || defined(EMCC2)
     if (t<0) return t+p; else return t;
@@ -12861,7 +12910,7 @@ namespace giac {
 #endif
 
 
-#if !defined NUMWORKS // !defined VISUALC && !defined USE_GMP_REPLACEMENTS && defined GIAC_PRECOND // de-recurse
+#if !defined NUMWORKS && defined GIAC_PRECOND // !defined VISUALC && !defined USE_GMP_REPLACEMENTS // de-recurse
   static void fft2pnopermafter( int *A, int n, int *W,int p,double invp,int step) {  
     if (n==0)
       CERR << "bug\n";
@@ -12903,7 +12952,7 @@ namespace giac {
 	fft_loop_p_precond_(&Aeff[3],&An2[3],Weff[3],Weff[7],p);
 	Aeff+=4; An2+=4; Weff+=8;
 	for (;Aeff<Aend;){
-#if 0 // def HAVE_VCL1_VECTORCLASS_H 
+#if 0 // def CPU_SIMD
 	  Vec4ui A4,An4,B4;
 	  Vec4uq C4;
 	  A4.load(Aeff);
@@ -12921,7 +12970,7 @@ namespace giac {
 	  An4 += ( (Vec4i) An4>>31)&p; 
 	  An4.store(An2);
 	  Aeff+=4; An2+=4; Weff+=8; continue;
-#endif // VECTORCLASS_H
+#endif // CPU_SIMD
 	  fft_loop_p_precond_(&Aeff[0],&An2[0],Weff[0],Weff[4],p);
 	  fft_loop_p_precond_(&Aeff[1],&An2[1],Weff[1],Weff[5],p);
 	  fft_loop_p_precond_(&Aeff[2],&An2[2],Weff[2],Weff[6],p);
@@ -13017,7 +13066,7 @@ namespace giac {
       fft_loop_p_(Acur,An2cur,Wcur,n2,p,invp);
       ++Acur;++An2cur; Wcur += step;
       // continue;
-#if 0 // def HAVE_VCL1_VECTORCLASS_H // debug
+#if 0 // def CPU_SIMD// debug
       A4.load(Acur-4);
       An4.load(An2cur-4);
       if ( horizontal_count(An4==compress(C4))!=4 || horizontal_count(A4==compress(B4))!=4)
@@ -13996,7 +14045,7 @@ namespace giac {
 	makepositive(&fftmult_p.front(),as,p4);
 	makepositive(&fftmult_q.front(),bs,p4);
       }
-      if (W.empty() || W[0]==0){ 
+      if (1 || W.empty() || W[0]==0){ // always called because fft_reverse does not work with p4 see below
 	W.clear();
 	fft2wp4(W,n,w);
       }
@@ -14005,10 +14054,11 @@ namespace giac {
       for (int i=0;i<n;++i){
 	fftmult_p[i]=mulmodp4(fftmult_p[i],fftmult_q[i]);
       }
-      fft_reverse(W,p4);
-      // w=invmod(w,p4); if (w<0) w+=p4; W.clear(); fft2wp4(W,n,w);
+      //fft_reverse(W,p4);
+      // fft_reverse call does not work, because it introduces negatives values that are not reset to positive in fft_loop_p1/2/3 by precond_mulmodp1/2/3 before addmod is called, leading to integer overflow
+      w=invmod(w,p4); if (w<0) w+=p4; W.clear(); fft2wp4(W,n,w);
       fft2p4nopermbefore(&fftmult_p.front(),n,&W.front());
-      fft_reverse(W,p4);
+      //fft_reverse(W,p4);
       fftmult_p.resize(rs);
       if (dividebyn){
 	int ninv=invmod(n,p4); if (ninv<0) ninv+=p4;
@@ -15336,8 +15386,15 @@ namespace giac {
 	  // because e.g. submod might return a negative number
 	  if (logrs<=25 && prime==p3 && nprimes==0) 
 	    prime=p4;//int(std::sqrt(1.8e18/mindeg));
+          // FIXME using prime p4 fails for bugfft 
+          // -*-: mode:text -*-
+          //f:=poly1[-253070091047527770,-53480522107226864,-257014059833118632,269715448375881038,-235720376862218564,166981914513687165,218110851201151862,-158783741220930864,51904516563014653,-187470057709600688,63581002454095093,-172056861978025213,-130850633399424767,26207953844023788,301106923767743919,21918735507218732,168650401624511436,247922011701116237,165953621303680844,-221466611282964327,55383300940980349,-310851772313391208,-8766687823817713,-207974164943347521,163282194673561283,100066293538457945,306148384916456932,-89388291952242086,56917109474591951,232011105406875498,-14064177569546444,-194611071070884087,-318053372482271519,127617220712127018,40126302055116880,-312761394909313150,96508836447441110,28152788804899333,-56620978437663413,12547932512847335,103384436126070695,168217421606753194,-155056990748300448,265872320788217438,-259237937564140877,262247718045551000,195017715773415219,84910848643593398,-185141414738180969,-178970655304503133,60479513853792145,-179045239093907729,317082793359435540,-152618038290337328,-6265927107083028,158605418684558409,-320269529845020310,-53598555641934808,307057606209660432,-268664382307169073,278749440868500803,68939417009653084,-232763635115327820,115586136683520108,34171498938020211,63705303106520809,-235819208729282870,97587924820249155,74671330324286328,-87891392269677858,-310174169140860387,327460853443261684,170348088984588075,279959806544786537,-67172788523954405,-256096983625035325,-233103376876720838,278653561884472375,-284121689637927894,-91733409936786922,-268797111268577790,153361759062655795,235046600026381875,-286492247289927636,-246557402692280500,149558428853451397,309981750732091508,193934733760992766,62345350877451937,-77398551002263364,84036733986760860,-21652694486233916,155781388355417742,-148564056660798316,-270312377673468595,-184585867112583729,204326596790556238,-47103928150397587,-290073660463340364,255585266347896164,172926032497004098,-227048790691762792,251767069983952051,157427373634761640,-107166366297974323,303968201493512596,-190782890280893308,-296213546085481523,138905432663581919,104069050394643186,-245344485754071774,277088563769105454,131162284612575664,-208731750947114032,122388875702277856,146359258017348785,27506636010989973,206419831368384146,-311983635918413099,-109053570534426823,93115875580603926,-283879747378050837,149358676630607911,195530545799556578,62891941857146056,173454904658997990,-95582471677277410,111003408121714195,-238089236299364488,245304974414587659,140323618202047345,239559608112051350,-108524671802713288,59487563242073281,-88635721848988186,160178108435810084,-15884599655360655,7433662489990972,-27894650035813353,-112733531097113995,94173499649705341,-142984986711807929,15311700246351862,113216079409254379,323879940439405720,76379429146404619,-260060073618046897,4851008952372746,-127417376576230345,171396209793719782,-198563801432623246,-118217781665157656,208250421207062656,269409574238860298,-4844964192168256,-80591143966315407,-226733062624820725,323470781234081507,-88762200042457593,88239991872068333,-207918632128073968,255584041860235748,201907534507625741,-39461511895707756,6517824760705964,163748043024548224,-102922492860198492,-37759128758698162,64757930425501353,-300317806364800999,-173095191554667721,-235654290161995047,-66632415861061228,118085019479623139,-174944448107893978,-231291775690030697,-290249134229926166,185209677964044001,-22534560275446069,118563573666681281,19821299977859589,66616060432925304,-107970447944972131,-296887391663147013,18812727328730516,-251528892026530187,211264812716338509,-92605070112396567,38995114457487337,144452903842187284,-21044941432873390,247020753212104013,64780981370282661,231096810375409166,-37251233012779,294722405347011530,-12462574035337065,154942746971451797,-303984777655368042,-174086244164404293,164787066322233893,330540258826063155,-79698504234471591,-204058220982907,1]:;
+          //g:=poly1[-285633852064725687,30648578798749124,249872275113330368,148690179538046507,106312490838784796,134748917103833280,283232577911604283,-293358327461995484,281658441765835201,86428083927144808,130457303507476386,103020592589231344,234181195802086496,306449349249971718,-14043652705234590,270173242363661856,197171742566327695,88649877587712357,-315122124810745017,323188736290173809,51574137174591784,308465799936114413,-219690518501259434,-327232202556710325,271756421463763370,-64132516533623185,60903579632421679,-224852706652057598,243271128912326253,-186813967327568162,-315288010254558296,34448418695609805,-7274741867713098,311914793828560002,-316615107615184331,-84277185507723989,45705730772408017,-43489447984218011,317037456213587762,81952729316833348,-210585176517980060,4095105921145905,-140613663458991142,-238850208358393205,-31986249879567395,302788947101261649,-114266655435170944,-318483737644797359,-48108305510847022,160225357661040673,-83231557239410645,150228768965365235,270071275436601844,47669055258051232,242819945859727106,-315008970464608868,75479289948789463,-179946274883534143,-57271327738241244,90355359196940084,-100832155051882049,243755856546295597,163841323132954888,-119631424989936569,55519057764458851,318425296901120798,321793010165687999,135703869852326476,100869434595359694,-202566010771035486,-151474847937169171,179629443812643574,-92802334816860448,81951701990000186,-327443309301664060,-9556047579155748,-39997743977158104,104677900777913631,-174340451921723517,-57488793253801574,104804631125124140,-99848504672395943,319273687569455460,230318338350125981,105455526208101709,-104898235924205345,213957405295772303,-291243859229491858,-288138989863102646,-193544141913234792,-147838157206409749,292286617172728368,133100930684372475,-24504839667367119,116018165641271177,-159291024486487458,-70527753105029564,-221586664734473596,-158301269104900062,299786948261540840,-195606914752738393,140039766413676199,-65823992380059077,-154208511379548733,76355100242052567,-38053080870760111,18431288598937337,-31604657849832477,225631460578470301,-177577156614713742,-164038029885485088,156742054528055379,-44295711329174738,-122606675764822514,215355047515345510,19764814246273687,-242930382388411942,-202557639060448189,131962976822273543,248720644245713996,158013704270243080,264952466246536756,-23504179051633678,150308523163030584,-198177788495142975,-51509665281988405,-41268936245622574,238329622762972261,85109091530391554,-96300676035314742,-305920439799697713,-87757780080801251,299403246021284579,-38908896357149643,92535827917485975,318674013721778026,-29261652765715908,225386978136138127,225110670479533011,-4822691609735515,96106892676200825,6400122042930684,75423170506760614,8970698717666688,23767093410104336,-95274437606785652,-200827987298657099,-54669108956624043,-157091195887485128,-301449862384359718,-138683435752375462,238378545857197668,-244621804244249142,40832009357250496,-102830192126462898,-275781044566811947,241736871179151271,-296080966582663805,-122710076955553982,293386387934739012,-138287942845704730,316088065009870801,-145034682032714787,2404038393438662,-313642164967454653,247855244688072372,250630899247849234,63084900572423232,-282250594200927126,235509084340639201,94074856951122047,-135275725425903474,97041092106741727,-187207522006046772,166692389319187351,76121871882710916,126542734318113766,-143878129449195019,46484380293443428,194710651605730705,109440828856734843,-306082568478895304,122666210127597500,299463229483006429,-302686568891907053,-188204536817762706,-127932591249796762,78053047106214341,-255313851226608209,5795355625575170,248922872676367354,-192427685950364937,-252032423413997867,-325664024575222796,229393242872352183,234799115909901732,-107358369263654964,-6639614479053960,221705173348060545,285689217969403468,21059417821509211,-176679167459758571,-222867096995838418,36430311600406601,-41964562526036508,-136238362631410853,165727814733689703,26919963391728879,-243569192504238735,315015263600017915,156197538116570084,-104390482949818906,-294642719134434228,-292447721843530167,328065893719815320,-77550314467473858,200053683685596066,-101849235287061607,254127786881279215,-232165695512451079,-259488730818900845,-135938995050588663,-118799940318145029,-28790655920592011,276424781332479326,106598157605761091,190482740467009459,-786674206769533,141674529100456599,-164883078364685605,-242923003245269503,311001712064678096,-275243601046142394,-159380129724785050,330739428726060939,-156134191789291935,-250685143406373469,16993733341121371,274142207802602223,330001528606374816,-1795499968291154,194678608296663424,-216168122845015310,-226799733606601695,-154699926302002095,145817786830047752,-265740805995759260,-27545362789293046,-315834491056018872,-89603391733114008,-53625714222032430,237224184077476868,-150146191957722793,408116441965814,1]:;
+          //fft_mult_size(1024);
+          //F:=f*g:;
+          //F[F.size()-1];
 	  else {
-	    if (prime==p4)
+	    if (prime==p4 || prime==p3)
 	      prime=p2;
 	    prime=prevprime(prime-1).val;
 	    if (prime==p1 || prime==p2 || prime==p3)

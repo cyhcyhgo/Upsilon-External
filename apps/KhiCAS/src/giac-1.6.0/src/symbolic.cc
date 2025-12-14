@@ -43,7 +43,7 @@ namespace giac {
   const unary_function_ptr * archive_function_tab(){
     static const unary_function_ptr archive_function_tab_ptr[]={*at_plus,*at_neg,*at_binary_minus,*at_prod,*at_division,*at_inv,*at_pow,*at_exp,*at_ln,*at_abs,*at_arg,*at_pnt,*at_point,*at_segment,*at_sto,*at_sin,
 								*at_cos,*at_tan,*at_asin,*at_acos,*at_atan,*at_sinh,*at_cosh,*at_tanh,*at_asinh,*at_acosh,*at_atanh,*at_interval,*at_union,*at_minus,*at_intersect,*at_not,
-								*at_and,*at_ou,*at_inferieur_strict,*at_inferieur_egal,*at_superieur_strict,*at_superieur_egal,*at_different,*at_equal,*at_rpn_prog,*at_local,*at_return,*at_Dialog,*at_double_deux_points,*at_pointprod,*at_pointdivision,*at_pointpow,*at_hash,*at_pourcent,*at_tilocal,*at_break,*at_continue,*at_ampersand_times,*at_maple_lib,*at_unit,*at_plot_style,*at_xor,*at_check_type,*at_quote_pow,*at_case,*at_dollar,*at_IFTE,*at_RPN_CASE,*at_RPN_LOCAL,*at_RPN_FOR,*at_RPN_WHILE,*at_NOP,*at_unit,*at_ifte,*at_for,*at_bloc,*at_program,*at_same,*at_increment,*at_decrement,*at_multcrement,*at_divcrement,*at_sq,*at_display,*at_of,*at_at,*at_normalmod,*at_equal2,*at_pointplus,*at_pointminus,*at_struct_dot,*at_try_catch,0};
+								*at_and,*at_ou,*at_inferieur_strict,*at_inferieur_egal,*at_superieur_strict,*at_superieur_egal,*at_different,*at_equal,*at_rpn_prog,*at_local,*at_return,*at_Dialog,*at_double_deux_points,*at_pointprod,*at_pointdivision,*at_pointpow,*at_hash,*at_pourcent,*at_tilocal,*at_break,*at_continue,*at_ampersand_times,*at_maple_lib,*at_unit,*at_plot_style,*at_xor,*at_check_type,*at_quote_pow,*at_case,*at_dollar,*at_IFTE,*at_RPN_CASE,*at_RPN_LOCAL,*at_RPN_FOR,*at_RPN_WHILE,*at_NOP,*at_unit,*at_ifte,*at_for,*at_bloc,*at_program,*at_same,*at_increment,*at_decrement,*at_multcrement,*at_divcrement,*at_sq,*at_display,*at_of,*at_at,*at_normalmod,*at_equal2,*at_pointplus,*at_pointminus,*at_struct_dot,*at_try_catch,*at_symmetric_difference,0};
     archive_function_tab_length=sizeof(archive_function_tab_ptr)/sizeof(const unary_function_ptr *);
     return archive_function_tab_ptr;
   }
@@ -361,7 +361,7 @@ namespace giac {
     }
 #endif
     bool argpar = ( (arg.type>_CPLX && arg.type!=_FLOAT_) || !is_positive(arg,contextptr)) && arg.type!=_IDNT ;
-#if defined EMCC || defined EMCC2 || defined GIAC_GGB 
+#if defined GIAC_GGB 
     bool need=need_parenthesis(arg) || arg.type==_SYMB;
     if (pui==plus_one_half){
 #ifdef KHICAS // inactive code
@@ -409,13 +409,36 @@ namespace giac {
 #endif
     }
     if (pui.type>_REAL && pui==plus_one_half){
-      s += "sqrt(";
+      if (calc_mode(contextptr)==110){
+        // called from Upsilon (110 refers to Numworks N0110)
+#if defined FXCG || defined NSPIRE_NEWLIB
+        s += "(";
+        add_print(s,arg,contextptr);
+        s += ")^(1/2)";
+        return s;
+#else
+        s += "√(";
+#endif
+      }
+      else
+        s += "sqrt(";
       add_print(s,arg,contextptr);
       s += ')'; 
       return s;
     }
-    if ( pui.type>_REAL && (pui==minus_one_half  || pui==fraction(minus_one,plus_two) )){
-      s += "1/sqrt(";
+    if ( pui.type>_REAL && (pui==minus_one_half  || pui==fraction(minus_one,plus_two) ) ){
+      if (calc_mode(contextptr)==110){
+#if defined FXCG || defined NSPIRE_NEWLIB
+        s += "1/(";
+        add_print(s,arg,contextptr);
+        s += ")^(1/2)";
+        return s;
+#else
+        s += "1/√(";
+#endif
+      }
+      else
+        s += "1/sqrt(";
       add_print(s,arg,contextptr);
       s += ')';
       return s;
@@ -529,7 +552,7 @@ namespace giac {
     }
     if ( g.feuille.type==_VECT && g.feuille._VECTptr->empty() ){
       s += g.sommet.ptr()->print(contextptr);
-      s += g.feuille.subtype==0?"([])":"(NULL)";
+      s += g.feuille.subtype==0?"([])":(g.feuille.subtype==_SET__VECT?"(set[ ])":"(NULL)");
       return s;
     }
     if (g.sommet==at_prod)
@@ -577,7 +600,9 @@ namespace giac {
 
   string & add_print(string & s,const gen & g,GIAC_CONTEXT){
     if (g.type==_IDNT){
-      if (calc_mode(contextptr)==1 && (is_inf(g) || is_undef(g)))
+      if (calc_mode(contextptr)==1 &&
+          (//is_inf(g) ||
+           is_undef(g)))
 	s += "?";
       else
 	(s += g._IDNTptr->print(contextptr));
@@ -1658,8 +1683,12 @@ namespace giac {
 
 
   unsigned taille(const gen & g,unsigned max){
+    if (g.type==_ZINT)
+      return 1+mpz_sizeinbase(*g._ZINTptr,16)/4;
     if (g.type<=_IDNT)
       return 1;
+    if (g.type==_STRNG)
+      return g._STRNGptr->size()/4+1;
     if (g.type==_FRAC)
       return 1+taille(g._FRACptr->num,max)+taille(g._FRACptr->den,max);
     if (g.type==_SYMB){

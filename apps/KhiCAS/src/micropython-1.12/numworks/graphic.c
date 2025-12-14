@@ -21,8 +21,8 @@
 #include "lexer.h"
 #include "parse.h"
 #include "compile.h"
-extern const struct _mp_obj_module_t mp_module_graphic;
 void py_ck_ctrl_c();
+extern const struct _mp_obj_module_t mp_module_graphic;
 // basic
 #ifdef NUMWORKS
 void c_sprint_double(char * s,double d);
@@ -204,7 +204,7 @@ static mp_obj_t graphic_draw_line(size_t n_args, const mp_obj_t *args) {
     x2 = mp_obj_get_int(args[2]), y2 = mp_obj_get_int(args[3]),
     color=0;
   if (n_args==5)    
-    color = mp_obj_get_int(args[4]);
+    color = mp_get_color(args[4]);
   c_draw_line(x1,y1,x2,y2,color);
   return mp_const_none;
 }
@@ -254,7 +254,7 @@ static mp_obj_t graphic_draw_polygon_(size_t n_args, const mp_obj_t *args,bool f
     ++tab;
   }
   if (n_args==2)    
-    color = mp_obj_get_int(args[1]);
+    color = mp_get_color(args[1]);
   if (filled)
     c_draw_filled_polygon(x,y,n,0,LCD_WIDTH,0,LCD_HEIGHT,color);
   else
@@ -292,6 +292,56 @@ static mp_obj_t graphic_fill_rect(size_t n_args, const mp_obj_t *args) {
 }
 MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(graphic_fill_rect_obj, 4, 5, graphic_fill_rect);
 MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(graphic_draw_filled_rectangle_obj, 4, 5, graphic_fill_rect);
+
+// Code inspired by draw_image from https://tiplanet.org/forum/img2calc.php
+static mp_obj_t graphic_draw_rle_image(size_t nargs, const mp_obj_t *args) {
+  if (!mp_obj_is_str_or_bytes(args[0]))
+    mp_raise_TypeError("Bad image data");
+  size_t lenrle; const char * rle=mp_obj_str_get_data(args[0],&lenrle);
+  size_t nvals;
+  mp_obj_t * pal;
+  mp_obj_get_array(args[4], &nvals, &pal);  
+  int x0=mp_obj_get_int(args[1]),y0=mp_obj_get_int(args[2]),w=mp_obj_get_int(args[3]);
+  int zoomx=1,zoomy=1,itransp=-1;
+  if (nargs>5) zoomx=mp_obj_get_int(args[5]);
+  if (nargs>6) zoomy=mp_obj_get_int(args[6]);
+  if (nargs>7) itransp=mp_obj_get_int(args[7]);
+  int i=0, x=0, nbits=0;
+  nvals--;
+  while(nvals){
+    nvals >>= 1;
+    nbits += 1;
+  }
+  int maskval = (1 << nbits) - 1;
+  int maskcnt = (0xFF >> nbits >> 1) << nbits;
+  while (i<lenrle){
+    char v = rle[i];
+    int mv = v & maskval;
+    int c = (v & maskcnt) >> nbits;
+    if ( (v & 0b10000000) || nbits == 8){
+      i += 1;
+      c |= rle[i] << (7 - nbits + (nbits == 8));
+    }
+    c += 1;
+    if (c<w-x && mv!=itransp){
+      c_fill_rect(x0 + x*zoomx, y0, c*zoomx, zoomy, mp_get_color(pal[mv]));
+      x += c;
+      i += 1;
+      continue;
+    }
+    while (c){
+      int cw = c<w-x?c:w-x;
+      if (mv != itransp)
+        c_fill_rect(x0 + x*zoomx, y0, cw*zoomx, zoomy, mp_get_color(pal[mv]));
+      c -= cw;
+      x = (x + cw) % w;
+      y0 += x==0?zoomy:0;
+    }
+    i += 1;
+  }
+  return mp_const_none;
+}
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(graphic_draw_rle_image_obj, 5, 8, graphic_draw_rle_image);
 
 static mp_obj_t graphic_draw_circle(size_t n_args, const mp_obj_t *args) {
   int x1 = mp_obj_get_int(args[0]), y1 = mp_obj_get_int(args[1]),
@@ -361,9 +411,14 @@ static mp_obj_t graphic_draw_string(size_t n_args, const mp_obj_t *args) {
   const char * text = mp_obj_str_get_str(args[2]);
   if (n_args>=4)
     c = mp_get_color(args[3]);
-  if (n_args>=5)
-    bg = mp_get_color(args[4]);
   const char * font = 0;
+  if (n_args>=5){
+    int c=mp_get_color(args[4]);
+    if (c==-1)
+      font=mp_obj_str_get_str(args[4]);
+    else
+      bg =c;
+  }
   if (n_args>=6)
     font=mp_obj_str_get_str(args[5]);
   if (font && strcmp(font,"small")==0)
@@ -377,6 +432,14 @@ static mp_obj_t graphic_draw_string(size_t n_args, const mp_obj_t *args) {
   return mp_const_none;
 }
 MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(graphic_draw_string_obj, 3, 6, graphic_draw_string);
+
+static mp_obj_t graphic_color(size_t n_args, const mp_obj_t *args) {
+  int r=mp_int_float2color(args[0]);
+  int g=mp_int_float2color(args[1]);
+  int b=mp_int_float2color(args[2]);
+  return mp_color_tuple(mp_rgb(r,g,b));
+}
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(graphic_color_obj, 3, 3, graphic_color);
 
 //
 static const mp_map_elem_t graphic_locals_dict_table[] = {
@@ -401,10 +464,12 @@ static const mp_map_elem_t graphic_locals_dict_table[] = {
 	{ MP_ROM_QSTR(MP_QSTR_fill_rect), (mp_obj_t) &graphic_fill_rect_obj },
 	{ MP_ROM_QSTR(MP_QSTR_draw_filled_rectangle), (mp_obj_t) &graphic_draw_filled_rectangle_obj },
 	{ MP_ROM_QSTR(MP_QSTR_draw_circle), (mp_obj_t) &graphic_draw_circle_obj },
+	{ MP_ROM_QSTR(MP_QSTR_draw_rle_image), (mp_obj_t) &graphic_draw_rle_image_obj },
  	{ MP_ROM_QSTR(MP_QSTR_draw_filled_circle), (mp_obj_t) &graphic_draw_filled_circle_obj },
  	{ MP_ROM_QSTR(MP_QSTR_draw_arc), (mp_obj_t) &graphic_draw_arc_obj },
  	{ MP_ROM_QSTR(MP_QSTR_draw_filled_arc), (mp_obj_t) &graphic_draw_filled_arc_obj },
 	{ MP_ROM_QSTR(MP_QSTR_draw_string), (mp_obj_t) &graphic_draw_string_obj },
+	{ MP_ROM_QSTR(MP_QSTR_color), (mp_obj_t) &graphic_color_obj },
 };
 
 
@@ -436,11 +501,13 @@ STATIC const mp_map_elem_t mp_module_graphic_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_fill_rect), (mp_obj_t) &graphic_fill_rect_obj },
     { MP_ROM_QSTR(MP_QSTR_draw_filled_rectangle), (mp_obj_t) &graphic_draw_filled_rectangle_obj },
     { MP_ROM_QSTR(MP_QSTR_draw_circle), (mp_obj_t) &graphic_draw_circle_obj },
+    { MP_ROM_QSTR(MP_QSTR_draw_rle_image), (mp_obj_t) &graphic_draw_rle_image_obj },
     { MP_ROM_QSTR(MP_QSTR_draw_filled_circle), (mp_obj_t) &graphic_draw_filled_circle_obj },
     { MP_ROM_QSTR(MP_QSTR_draw_arc), (mp_obj_t) &graphic_draw_arc_obj },
     { MP_ROM_QSTR(MP_QSTR_draw_filled_arc), (mp_obj_t) &graphic_draw_filled_arc_obj },
     { MP_ROM_QSTR(MP_QSTR_get_pixel), (mp_obj_t) &graphic_get_pixel_obj },
     { MP_ROM_QSTR(MP_QSTR_draw_string), (mp_obj_t) &graphic_draw_string_obj },
+    { MP_ROM_QSTR(MP_QSTR_color), (mp_obj_t) &graphic_color_obj },
     { MP_ROM_QSTR(MP_QSTR_show_screen), (mp_obj_t) &graphic_show_screen_obj },
     { MP_ROM_QSTR(MP_QSTR_clear_screen), (mp_obj_t) &graphic_clear_screen_obj },
     { MP_ROM_QSTR(MP_QSTR_clear), (mp_obj_t) &graphic_clear_obj },

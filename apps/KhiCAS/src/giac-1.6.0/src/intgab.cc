@@ -199,7 +199,8 @@ namespace giac {
     if (res)
       return res;
     gen f1=f,f2=subst(f,x,-x,false,contextptr);
-    if (lvar(f)==vecteur(1,x)){ // rational case
+    vecteur v=lvar(f);
+    if (v==vecteur(1,x)){ // rational case
       if (is_zero(normal(f1-f2,contextptr)))
 	return 1;
       if (is_zero(normal(f1+f2,contextptr)))
@@ -207,9 +208,9 @@ namespace giac {
       return 0;
     }
     f1=_texpand(f1,contextptr);
-    f1=normal(f1,contextptr);
+    f1=normal(recursive_ratnormal(f1,contextptr),contextptr);
     f2=_texpand(f2,contextptr);
-    f2=normal(f2,contextptr);
+    f2=normal(recursive_ratnormal(f2,contextptr),contextptr);
     if (f1==f2)
       return 1;
     if (is_zero(ratnormal(invfracpow(f1+f2,contextptr),contextptr)))
@@ -633,6 +634,10 @@ namespace giac {
       vecteur rA=singular(A,x,contextptr);
       if (!rA.empty() && is_undef(rA))
 	return false;
+      for (int i=0;i<rA.size();++i){
+        if (is_exactly_zero(im(rA[i],contextptr)))
+          return false;
+      }
       vecteur Pv=factors(P,x,contextptr);
       int Pvs=int(Pv.size()/2);
       for (int Pi=0;Pi<Pvs;++Pi){
@@ -900,12 +905,38 @@ namespace giac {
     return subst(g,inv_v,applyinv_v,false,contextptr);
   }
 
+  bool helper_polyexp(const gen & gan,const gen & gad_b,const gen & expo_a,const gen & x,gen & res,GIAC_CONTEXT){
+    // -1/gad_b*int(gan/(exp(expo_a*t)-1),t,0,inf)
+    gen ganv=_coeff(makesequence(gan,x),contextptr);
+    if (ganv.type==_VECT && !ganv._VECTptr->empty() && is_zero(ganv._VECTptr->back())){
+      res=0;
+      vecteur v=*ganv._VECTptr;
+      gen facti=pow(expo_a,-2,contextptr);
+      for (int i=1;i<int(v.size());++i){
+        gen coeff=v[v.size()-i-1];
+        if (!is_zero(coeff))
+          res += coeff*facti*Zeta(i+1,contextptr);
+        facti=facti*gen(i+1)/expo_a;
+      }
+      res=ratnormal(-res/gad_b,contextptr);
+      return true;
+    }
+    return false;
+  }
+    
   static bool intgab(const gen & g0,const gen & x,const gen & a,const gen & b,gen & res,bool nonrecursive,GIAC_CONTEXT){
     if (x.type!=_IDNT)
       return false;
     if (is_zero(g0)){
       res=zero;
       return true;
+    }
+    if (is_zero(a+b)){
+      int i=is_even_odd(g0,x,contextptr);
+      if (i==2){
+        res=zero;
+        return true;
+      }
     }
     if (a==unsigned_inf || b==unsigned_inf){
       *logptr(contextptr) << gettext("Please use +infinity or -infinity since infinity is unsigned") << '\n';
@@ -1173,23 +1204,16 @@ namespace giac {
 	    if (rlvarx(gan,x).size()==1 && is_linear_wrt(gad,expo,gad_a,gad_b,contextptr)){
 	      // gad=gad_a*(expo+gad_b/gad_a)
 	      gen test=ratnormal(gad_a*exp(expo_b,contextptr)+gad_b,contextptr);
-	      if (is_zero(test)){
-		// -1/gad_b*int(gan/(exp(expo_a*t)-1),t,0,inf)
-		gen ganv=_coeff(makesequence(gan,x),contextptr);
-		if (ganv.type==_VECT && !ganv._VECTptr->empty() && is_zero(ganv._VECTptr->back())){
-		  res=0;
-		  vecteur v=*ganv._VECTptr;
-		  gen facti=pow(expo_a,-2,contextptr);
-		  for (int i=1;i<int(v.size());++i){
-		    gen coeff=v[v.size()-i-1];
-		    if (!is_zero(coeff))
-		      res += coeff*facti*Zeta(i+1,contextptr);
-		    facti=facti*gen(i+1)/expo_a;
-		  }
-		  res=ratnormal(-res/gad_b,contextptr);
-		  return true;
-		}
-	      } // end if is_zero(test)
+	      if (is_zero(test) && helper_polyexp(gan,gad_b,expo_a,x,res,contextptr))
+                return true;
+              test=ratnormal(gad_a*exp(expo_b,contextptr)-gad_b,contextptr);
+              if (is_zero(test)){
+                gen res2,res1;
+                if (helper_polyexp(gan,gad_b,2*expo_a,x,res2,contextptr) && helper_polyexp(gan,gad_b,expo_a,x,res1,contextptr)){
+                  res=ratnormal(2*res2-res1,contextptr);
+                  return true;
+                }
+              }
 	    } // end if (rlvarx(gan,x).size()==1
 	  } // end if gand.type==_VECT
 	  identificateur t(" tintgab");
@@ -1276,7 +1300,7 @@ namespace giac {
     gen gm=subst(g0,x,b,false,contextptr)+subst(g0,x,a,false,contextptr);
     if (!has_evalf(gm,gabd,1,contextptr) || is_zero(gabd))
       gm=simplify(gm,contextptr);
-    if (is_constant_wrt(g,x,contextptr)){
+    if (is_constant_wrt(g,x,contextptr) && lop(g,at_sign).empty() ){
       if (contains(g,x))
 	g=ratnormal(g,contextptr);
       res=g*(b-a);
@@ -1798,6 +1822,30 @@ namespace giac {
       // sum_{x=a}^{b} comb(b-a,j*x-j*a)*p^x
       // 
       gen Q=r2sym(q,v,contextptr),R=r2sym(r,v,contextptr),Qa,Qb,Ra,Rb;
+      if (is_inf(a) || is_inf(b)){
+        // gen P=r2sym(p,v,contextptr);
+        // limit |P(x+1)/P(x)*Q/R| must be <=1
+        // for a polynomial limit p(x+1)/p(x) is always 1,
+        // so we have only Q/R in the limit
+        int qs=q.lexsorted_degree(),rs=r.lexsorted_degree();
+        if (qs>rs){
+          res=unsigned_inf; // FIXME: should be more precise!
+          return true;
+        }
+        if (qs==rs){
+          gen l=limit(Q/R,*x._IDNTptr,plus_inf,1,contextptr);
+          l=abs(l,contextptr);
+          gen tst=superieur_egal(1,l,contextptr);
+          if (tst.type==_INT_){
+            if (tst.val==0){
+              res=unsigned_inf;
+              return true;
+            }
+          }
+          else
+            *logptr(contextptr) << gettext("Run assume(") << tst << ") otherwise serie is divergent\n";
+        }
+      }
       if (a.type==_INT_ && b==plus_inf && p.lexsorted_degree()==0 && r.coord.size()==1 && q+r==0 ){
 	// gen coeff=inv(r.coord.front().value,contextptr);
 	int pui=r.lexsorted_degree();
@@ -1976,6 +2024,8 @@ namespace giac {
 	if (!sumab(argv[i],x,a_orig,b_orig,tmp,testi,contextptr))
 	  break;
 	res += tmp;
+        if (is_undef(res))
+          return false;
       }
       if (i==args)
 	return true;

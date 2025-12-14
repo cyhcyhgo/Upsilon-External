@@ -365,7 +365,7 @@ namespace giac {
     if (fact.type!=_MOD && fact.type!=_USER && !th.coord.empty() && th.coord.front().value.type==_MOD){
       fact = makemod(fact,*(th.coord.front().value._MODptr+1));
     }
-    if (!is_zero(fact)){
+    if (!is_exactly_zero(fact)){
       vector< monomial<gen> >::const_iterator a = th.coord.begin();
       vector< monomial<gen> >::const_iterator a_end = th.coord.end();
       Mul<gen>(a,a_end,fact,res.coord);
@@ -855,7 +855,11 @@ namespace giac {
 		 std::vector< monomial<gen> >::const_iterator & itb_end,
 		 std::vector< monomial<gen> > & new_coord,
 		 bool (* is_strictly_greater)( const index_m &, const index_m &),
+#ifdef CPP11
+                 const std::function<bool(const monomial<gen> &, const monomial<gen> &)> m_is_strictly_greater
+#else
 		 const std::pointer_to_binary_function < const monomial<gen> &, const monomial<gen> &, bool> m_is_strictly_greater
+#endif
 	     ) {
     if (ita==ita_end || itb==itb_end){
       new_coord.clear();
@@ -4407,6 +4411,7 @@ namespace giac {
 	if (arg!=0){
 	  gen mult=arg>0?(-cst_i):(arg==-1?cst_i:-1);
 	  d *= mult;
+          if (mult.type==_CPLX) mult=-mult;
 	  if (compute_cofactors){
 	    p_simp *= mult;
 	    q_simp *= mult;
@@ -4707,6 +4712,8 @@ namespace giac {
   }
 
   polynome gcdpsr(const polynome &p,const polynome &q,int gcddeg){
+    if (is_undef(p) || is_undef(q))
+      return polynome( monomial<gen>(1,p.dim));
     if (has_num_coeff(p) || has_num_coeff(q))
       return polynome( monomial<gen>(1,p.dim));
     if (debug_infolevel)
@@ -5034,6 +5041,11 @@ namespace giac {
 	}
       }
       p_gcd=p_gcd*d_content;
+      gen pz=ppz(p,true),qz=ppz(q,true);
+      gen g=simplify(pz,qz);
+      mulpoly(p_gcd,g,p_gcd);
+      mulpoly(p,pz,p);
+      mulpoly(q,qz,q);
       return ;
     }
     p_gcd=gcdpsr(p_orig,q_orig);
@@ -5183,6 +5195,16 @@ namespace giac {
       d=p;
       return ;
     }
+    if (p.coord.front().value.type==_MOD && q.coord.front().value.type!=_MOD){
+      polynome qq=p.coord.front().value*q;
+      gcd(p,qq,d);
+      return;
+    }
+    if (p.coord.front().value.type!=_MOD && q.coord.front().value.type==_MOD){
+      polynome pp=q.coord.front().value*p;
+      gcd(pp,q,d);
+      return;
+    }
     /* if (p==q)
        return p; */
     if (p.dim==0){
@@ -5223,7 +5245,7 @@ namespace giac {
       d=p1;
       u.coord.clear();
       u.dim=p1.dim;
-      u.coord.push_back(monomial<gen>(1,0));
+      u.coord.push_back(monomial<gen>(1,index_t(u.dim)));
       v.dim=p1.dim;
       v.coord.clear();
       return;
@@ -5234,14 +5256,33 @@ namespace giac {
       u.dim=p2.dim;
       v.dim=p2.dim;
       v.coord.clear();
-      v.coord.push_back(monomial<gen>(1,0));
+      v.coord.push_back(monomial<gen>(1,index_t(u.dim)));
       return;
     }
     if (try_hensel_egcd(p1,p2,u,v,d))
       return;
     polynome g=gcd(p1,p2);
     if (g.lexsorted_degree()){
-      egcd(p1/g,p2/g,u,v,d);
+      // if p1 and p2 do not have alg. extensions inside we can divide by g
+      int pt1=p1.coord.front().value.type,pt2=p2.coord.front().value.type;
+      if (pt1<_EXT && pt2<_EXT){
+        egcd(p1/g,p2/g,u,v,d);
+        d=g*d;
+        return;
+      }
+      // in general, let a and A such that a*p1=g*A and b and B / b*p2=g*B
+      // solve bezout for A and B: A*U+B*V=D
+      // multiply by g
+      // p1*(a*U)+p2*(b*V)=d*g
+      polynome a(g.dim),A(g.dim),b(g.dim),B(g.dim),rem(g.dim);
+      if (!p1.TPseudoDivRem(g,A,rem,a) || !rem.coord.empty() ||
+          !p2.TPseudoDivRem(g,B,rem,b) || !rem.coord.empty()){
+        // should not happen
+        gensizeerr("gausspol/egcd error");
+      }
+      egcd(A,B,u,v,d);
+      u=a*u;
+      v=b*v;
       d=g*d;
       return;
     }
@@ -5255,7 +5296,7 @@ namespace giac {
       return;
     }
     if (p1t==0 && p2t==0 
-	&& (p1.dim!=1 || (p1.lexsorted_degree()>=GIAC_PADIC/2 && p2.lexsorted_degree()>=GIAC_PADIC/2))
+	&& (p1.dim!=1 || (p1.lexsorted_degree()>=giacmax(MAX_COMMON_ALG_EXT_ORDER_SIZE+1,GIAC_PADIC/2) && p2.lexsorted_degree()>=giacmax(MAX_COMMON_ALG_EXT_ORDER_SIZE+1,GIAC_PADIC/2)))
 	){
       if (debug_infolevel>2)
 	CERR << CLOCK()*1e-6 << "starting extended gcd degrees " << p1.lexsorted_degree() << " " << p2.lexsorted_degree() << '\n';
@@ -5335,12 +5376,20 @@ namespace giac {
 	    int p2s=P2n.lexsorted_degree();
 	    V=vecteur(U.begin()+p2s,U.end());
 	    poly12polynome(V,1,v);
-	    v=(v*P2) % p1;
-	    U=vecteur(U.begin(),U.begin()+p2s);
-	    poly12polynome(U,1,u);
-	    u=(u*P1) % p2;
-	    //CERR << (operator_times(u,p1,0)+operator_times(v,p2,0))/D << '\n';
-	    return;
+	    //v=(v*P2) % p1;
+            polynome prod(v*P2),quo(p1.dim),rem(p1.dim);
+            if (prod.TDivRem1(p1,quo,rem,true)){
+              v=rem;
+              U=vecteur(U.begin(),U.begin()+p2s);
+              poly12polynome(U,1,u);
+              // u=(u*P1) % p2;
+              prod=u*P1;
+              if (prod.TDivRem1(p2,quo,rem,true)){
+                u=rem;
+                //CERR << (operator_times(u,p1,0)+operator_times(v,p2,0))/D << '\n';
+                return;
+              }
+            }
 	  }
 	}
       }
@@ -5643,12 +5692,12 @@ namespace giac {
 	    int b0d=itfact.dim;
 	    vecteur vb0(b0d),vb1(b0d),lv(b0d);
 	    lv[0]=gen("x0",context0);
-	    // int hasard=rand()/(RAND_MAX/env->modulo.val);
+	    // int hasard=std_rand()/(RAND_MAX/env->modulo.val);
 	    int hasard=0;
 	    vb0[0]=sym2r(lv[0]+hasard,lv,context0);
 	    vb1[0]=sym2r(lv[0]-hasard,lv,context0);
 	    for (int i=1;i<b0d;i++){
-	      int hasard1=0; // rand()/(RAND_MAX/env->modulo.val);
+	      int hasard1=0; // std_rand()/(RAND_MAX/env->modulo.val);
 	      int hasard2=std_rand()/(RAND_MAX/env->modulo.val);
 	      lv[i]=gen("x"+print_INT_(i),context0);
 	      vb0[i]=sym2r(lv[i]+hasard1*lv[0]+hasard2,lv,context0);
@@ -5953,6 +6002,8 @@ namespace giac {
     }
     if (debug_infolevel)
       CERR << CLOCK()*1e-6 << " norme factor begin" << '\n';
+    gen normden(1); lcmdeno(norme,normden);
+    norme=normden*norme;
     bool test=factor(norme,temp,f,true,false,complexmode,1,extra_div);
     if (debug_infolevel)
       CERR << CLOCK()*1e-6 << " norme factor end" << '\n';
@@ -6004,7 +6055,7 @@ namespace giac {
     return false;
   }
 
-  bool ext_factor(const polynome &p,const gen & e,gen & an,polynome & p_content,factorization & f,bool complexmode,gen & extra_div){
+  bool ext_factor_nodegck(const polynome &p,const gen & e,gen & an,polynome & p_content,factorization & f,bool complexmode,gen & extra_div){
     if (e._EXTptr->type!=_VECT){
 #ifndef NO_STDEXCEPT
       settypeerr(gettext("Modular factorization not yet accessible"));
@@ -6052,11 +6103,21 @@ namespace giac {
       }
       for (it=newp._POLYptr->coord.begin();it!=itend;++it){
 	if (it->value.type==_EXT)
+	  it->value=ext_reduce(it->value);	  
+#if 1 // added for f:=(-40*a_t^4*6*sqrt(6)+100*a_t^4*6+230*a_t^4*sqrt(6)-576*a_t^4-20*i*a_t^3*sqrt(-(2*sqrt(6))^2+25)*6-(-100*i)*a_t^3*sqrt(-(2*sqrt(6))^2+25)*sqrt(6)-120*i*a_t^3*sqrt(-(2*sqrt(6))^2+25)-20*i*a_t*sqrt(-(2*sqrt(6))^2+25)*6-(-100*i)*a_t*sqrt(-(2*sqrt(6))^2+25)*sqrt(6)-120*i*a_t*sqrt(-(2*sqrt(6))^2+25)+40*6*sqrt(6)-100*6-230*sqrt(6)+576)/(198*sqrt(6)-485);g:=factor(f);normal(f-g);
+	if (it->value.type==_EXT){
+	  if (the_ext.type==_EXT)
+	    common_EXT(*(it->value._EXTptr+1),*(the_ext._EXTptr+1),0,context0);
 	  it->value=ext_reduce(it->value);
+	  the_ext=ext_reduce(the_ext);
+	  if (the_ext.type==_FRAC)
+	    the_ext=the_ext._FRACptr->num;
+	}
+#endif
       }
       gen bn2=1;
       lcmdeno(*newp._POLYptr,bn2);
-      newp=bn2*newp;
+      mulpoly(*newp._POLYptr,bn2,*newp._POLYptr); // newp=bn2*newp;
       if (the_ext.type!=_EXT)
 	return false;
       bool res=ext_factor(*newp._POLYptr,the_ext,an,p_content,f,false,extra_div);
@@ -6130,12 +6191,36 @@ namespace giac {
 	  vecteur v=*res._VECTptr;
 	  unsigned j=0;
 	  lv=vecteur(1,vecteur(1,lv[0]));
+          int fpos=f.size();
 	  for (;j<v.size();++j){
 	    res=v[j];
 	    if (res.type!=_VECT || res._VECTptr->size()!=2)
 	      break;
 	    int mult=res._VECTptr->back().val;
-	    res=sym2r(res._VECTptr->front(),lv,context0);
+	    res=res._VECTptr->front();
+            if (res.is_symb_of_sommet(at_plus) && res._SYMBptr->feuille.type==_VECT && res._SYMBptr->feuille._VECTptr->size()==2 && res._SYMBptr->feuille._VECTptr->front()==x__IDNT_e
+                ){
+              res=res._SYMBptr->feuille._VECTptr->back();
+              gen den=1;
+              if (res.is_symb_of_sommet(at_prod) && res._SYMBptr->feuille.type==_VECT && res._SYMBptr->feuille._VECTptr->size()==2){
+                den=res._SYMBptr->feuille._VECTptr->back();
+                if (den.is_symb_of_sommet(at_inv))
+                  den=den._SYMBptr->feuille;
+                else
+                  den=undef;
+                res=res._SYMBptr->feuille._VECTptr->front();
+              }
+              if (!is_integer(den) || !res.is_symb_of_sommet(at_rootof))
+                break;
+              res=res._SYMBptr->feuille;
+              res=algebraic_EXTension(res[0],change_subtype(res[1],0))/den;
+              polynome p(1);
+              p.coord.push_back(monomial<gen>(1,1,1,1));
+              p.coord.push_back(monomial<gen>(res,0,1,1));
+              f.push_back(facteur<polynome>(p,mult));
+              continue;
+            } else
+              break; // res=sym2r(res,lv,context0); // FIXME, might recurse
 	    if (res.type==_FRAC)
 	      res=res._FRACptr->num;
 	    if (res.type!=_POLY)
@@ -6151,6 +6236,8 @@ namespace giac {
 	    }
 	    continue;// return true;
 	  }
+          else
+            f.erase(f.begin()+fpos,f.end());
 	}
       }
 #endif
@@ -6243,6 +6330,26 @@ namespace giac {
     return true;   
   }
 
+  bool ext_factor(const polynome &p,const gen & e,gen & an,polynome & p_content,factorization & f,bool complexmode,gen & extra_div){
+    if (e.type==_EXT && (e._EXTptr+1)->type==_EXT){
+      gen E=ext_reduce(e);
+      polynome P(p);
+      vector< monomial<gen> >::iterator it=P.coord.begin(),itend=P.coord.end();
+      for (;it!=itend;++it){
+        if (it->value.type==_EXT) it->value=ext_reduce(it->value);
+      }
+      return ext_factor(P,E,an,p_content,f,complexmode,extra_div);
+    }
+    if (!ext_factor_nodegck(p,e,an,p_content,f,complexmode,extra_div))
+      return false;
+    // additional check that degrees match
+    int pdeg=p.lexsorted_degree(),sumdeg=0;
+    for (size_t i=0;i<f.size();++i)
+      sumdeg += f[i].mult*f[i].fact.lexsorted_degree();
+    if (pdeg!=sumdeg)
+      CERR << "Degree mismatch inside factorisation over extension\n";
+    return pdeg==sumdeg;
+  }
 
   static void addtov(const polynome & tmp,vectpoly & v,bool with_sqrt,bool complexmode){
     if (!with_sqrt || tmp.lexsorted_degree()!=2 || tmp.dim>1)
@@ -6348,7 +6455,7 @@ namespace giac {
     // test if p has a numeric coeff
     if (has_num_coeff(p)){
       vecteur w=polynome2poly1(p,1);
-      w=proot(w); 
+      w=proot(w,context0); 
       if (is_undef(w))
 	return false;
       const_iterateur it=w.begin(),itend=w.end();
@@ -6368,7 +6475,7 @@ namespace giac {
 	else {
 	  copie = res;
 	  if (!is_zero(*it))
-	    copie.coord.push_back(monomial<gen>(-*it,index_t(1,0)));
+	    copie.coord.push_back(monomial<gen>(-(complexmode?*it:re(*it,context0)),index_t(1,0)));
 	}
 	v.push_back(copie);
       }
@@ -6405,6 +6512,7 @@ namespace giac {
 	  return true;
 	}
       }
+#ifndef EMCC
       if (d%4==0 && with_sqrt){
 	gen e=algebraic_EXTension(makevecteur(1,0),makevecteur(1,0,-2));
 	gen an=1,extra_div=1;
@@ -6417,6 +6525,7 @@ namespace giac {
 	  return true;
 	}
       }
+#endif
       if (p.coord.back().value==1){
 	// product of cyclotomic(n) where n divides 2d and does not divide d
 	gen dd=_minus(makesequence(idivis(2*d,context0),idivis(d,context0)),context0);
@@ -6507,8 +6616,29 @@ namespace giac {
     return true;
   }
 
+  bool has_gf_coeff(const polynome & p,gen & modulo){
+#ifdef RTTI
+    vector< monomial<gen> >::const_iterator it=p.coord.begin(),itend=p.coord.end();
+    for (;it!=itend;++it){
+      if (it->type==_USER){
+        if (galois_field * ptr=dynamic_cast<galois_field *>(it->_USERptr)){
+          modulo=ptr->p;
+          return true;
+        }
+      }
+    }
+#endif
+    return false;
+  }
+
   factorization sqff(const polynome &p ){
-    factorization f=Tsqff_char0<gen>(p);
+    factorization f; gen m;
+    if ( (has_mod_coeff(p,m) || has_gf_coeff(p,m)) && m.type==_INT_){
+      // otherwise it's like if char is 0
+      f=squarefree_fp(p,m.val,1);
+    }
+    else
+      f=Tsqff_char0<gen>(p);
     // take care of cst coefficients
     if (!p.coord.empty()){
       gen p0=p.coord.front().value,p1(1);
@@ -6528,7 +6658,7 @@ namespace giac {
 
   static bool sqff_evident_primitive(const polynome & pp,factorization & f,bool with_sqrt,bool complexmode){
     // first square-free factorization
-
+    
 #if 0 // Cette version ne marche pas it->fact plus bas renvoie un vecteur vide.. ou quelquechose comme ca..
    const factorization & sqff_f = has_num_coeff(pp)?factorization(1,facteur< polynome >(pp,1)):sqff(pp);
 #else // celle la, plus ancienne, marche... 
@@ -6847,7 +6977,7 @@ namespace giac {
 	  // search a smaller b
 	  for (int essai=0;essai<3;++essai){
 	    for (int i=0;i<b0d;++i){
-	      //b[i]=1+iquo(rand(),RAND_MAX/3);
+	      //b[i]=1+iquo(std_rand(),RAND_MAX/3);
 	      b[i]=1+iquo(giac_rand(context0),RAND_MAX/4);
 	    }
 	    if (find_good_eval(pcur,pcur,Fb,Gb,b,(debug_infolevel>=2))){
@@ -7026,6 +7156,24 @@ namespace giac {
     }
     else
       p_primit=p;
+#if 1
+    // adjust for i
+    if (!isprimitive && p_primit.coord.front().value.type==_CPLX){
+      const gen & g=p_primit.coord.front().value;
+      if (is_exactly_zero(*g._CPLXptr)){
+        if (is_strictly_positive(*(g._CPLXptr+1),context0)){
+          p_primit=-cst_i*p_primit;
+          p_content=cst_i*p_content;
+          //extra_div=cst_i*extra_div;
+        }
+        else {
+          p_primit=cst_i*p_primit;
+          p_content=-cst_i*p_content;
+          //extra_div=-cst_i*extra_div;
+        }
+      }
+    }
+#endif
     p_content /= divide_an_by;
     if (is_one(p_primit))
       return true;

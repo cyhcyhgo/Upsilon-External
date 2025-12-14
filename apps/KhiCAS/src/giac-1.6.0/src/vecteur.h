@@ -17,6 +17,7 @@
  */
 #ifndef _GIAC_VECTEUR_H
 #define _GIAC_VECTEUR_H
+struct mod4int;
 #include "first.h"
 #include "index.h"
 #include <complex>
@@ -124,10 +125,10 @@ namespace giac {
 
   matrice companion(const vecteur & w);
   gen a_root(const vecteur & v,const std::complex<double> & c0,double eps);
-  vecteur proot(const vecteur & v);
-  vecteur proot(const vecteur & v,double eps);
-  vecteur proot(const vecteur & v,double & eps,int & rprec);
-  vecteur real_proot(const vecteur & v,double eps,GIAC_CONTEXT);
+  vecteur proot(const vecteur & v,GIAC_CONTEXT0);
+  vecteur proot(const vecteur & v,double eps,GIAC_CONTEXT0);
+  vecteur proot(const vecteur & v,double & eps,int & rprec,GIAC_CONTEXT0);
+  vecteur real_proot(const vecteur & v,double eps,GIAC_CONTEXT0);
   gen symb_proot(const gen & e) ;
   gen _proot(const gen & e,GIAC_CONTEXT);
   extern const unary_function_ptr * const  at_proot ;
@@ -260,6 +261,7 @@ namespace giac {
   bool multvectvector_int_vector_int(const std::vector< std::vector<int> > & M,const std::vector<int> & v,int modulo,std::vector<int> & Mv);
   void tran_vect_vector_int(const std::vector< std::vector<int> > & N,std::vector< std::vector<int> > & tN);
   void apply_permutation(const std::vector<int> & permutation,const std::vector<int> &x,std::vector<int> & y);
+  void apply_permutation(vecteur &v,std::vector<int> &p,bool keep_p=false); // efficient sorting of v w.r.t. p, added by L. Marohnic
   void vecteur2vector_int(const vecteur & v,int modulo,std::vector<int> & res);
   
   enum matrix_algorithms {
@@ -289,6 +291,8 @@ namespace giac {
   // Returns 0 on failure, 1 on success, 2 if success inverting and no need to remove identity
   int mrref(const matrice & a, matrice & res, vecteur & pivots, gen & det,int l, int lmax, int c,int cmax,
 	     int fullreduction,int dont_swap_below,bool convert_internal,int algorithm,int rref_or_det_or_lu,GIAC_CONTEXT);
+  int mrref(const matrice & a, matrice & res, std::vector<int> & permutation,vecteur & pivots, gen & det,int l, int lmax, int c,int cmax,
+	     int fullreduction,int dont_swap_below,bool convert_internal,int algorithm,int rref_or_det_or_lu,GIAC_CONTEXT);
   // holds temporary work storage for block operation
   struct smallmodrref_temp_t {
     std::vector< std::vector<int> > Ainvtran,Ainv,CAinv;
@@ -307,13 +311,32 @@ namespace giac {
   // finish full row reduction to echelon form if N is upper triangular
   // this is done from lmax-1 to l
   void smallmodrref_upper(std::vector< std::vector<int> > & N,int l,int lmax,int c,int cmax,int modulo);
+  bool smallmodrref_upper(std::vector< std::vector<mod4int> > & N,int l,int lmax,int c,int cmax,mod4int modulo);
   // finish row reduction for matrices with much more columns than rows
   // version adapted for threads parallelization
   // assumes that all columns are reduced in parallel, pivots are searched
   // starting at column 0
   void in_thread_smallmodrref_upper(std::vector< std::vector<int> > & N,int l,int lpivot,int lmax,int c,int cmax,int modulo,int parallel);
   void thread_smallmodrref_upper(std::vector< std::vector<int> > & N,int l,int lmax,int c,int cmax,int modulo,int parallel);
-  void free_null_lines(std::vector< std::vector<int> > & N,int l,int lmax,int c,int cmax);
+  
+  template<class T>
+  void free_null_lines(std::vector< std::vector<T> > & N,int l,int lmax,int c,int cmax){
+    if (c==0){
+      for (int L=lmax-1;L>=l;--L){
+        std::vector<T> & NL=N[L];
+	if (NL.empty()) continue;
+	if (NL.size()!=cmax) break;
+	int C;
+	for (C=cmax-1;C>=c;--C){
+	  if (NL[C]!=0) break;
+	}
+	if (C>=c) break;
+	NL.clear();
+      }
+    }
+  }
+  
+  // void free_null_lines(std::vector< std::vector<int> > & N,int l,int lmax,int c,int cmax);
   int smallmodrref_lastpivotcol(const std::vector< std::vector<int> > & K,int lmax);
 
   void smallmodrref(int nthreads,std::vector< std::vector<int> > & N,vecteur & pivots,std::vector<int> & permutation,std::vector<int> & maxrankcols,longlong & idet,int l, int lmax, int c,int cmax,int fullreduction,int dont_swap_below,int modulo,int rref_or_det_or_lu,bool reset,smallmodrref_temp_t * workptr,bool allow_block,int carac);
@@ -369,6 +392,11 @@ namespace giac {
   bool padic_linsolve_solve(const matrice & a,const gen & p,const std::vector<int> & ranklines,const std::vector<int> & rankcols,const matrice & asub,const matrice & ainv,const vecteur & compat,const vecteur & b,vecteur & sol);
   gen _padic_linsolve(const gen & g,GIAC_CONTEXT);
 
+  bool is_blockmatrix(const matrice & a,std::vector<int> & p);
+  void extract(const matrice & a,const std::vector<int> & p,matrice & a1);
+  void complement(const std::vector<int> & p,int s,std::vector<int> & c);
+  void block_rebuild(const matrice & res1,const std::vector<int> & p1,const matrice & res2,const std::vector<int> & p2,matrice & res);
+  
   matrice minv(const matrice & a,GIAC_CONTEXT);
   gen mdet(const matrice & a,GIAC_CONTEXT);
   gen _det(const gen & a,GIAC_CONTEXT);
@@ -389,8 +417,8 @@ namespace giac {
   vecteur mpcar_int(const matrice & A,bool krylov,GIAC_CONTEXT,bool compute_pmin);
 
   void mod_pcar(std_matrix<gen> & N,vecteur & res,bool compute_pmin);
-  bool mod_pcar(const matrice & A,std::vector< std::vector<int> > & N,int modulo,bool & krylov,std::vector<int> & res,GIAC_CONTEXT,bool compute_pmin);
-  bool mod_pcar(std::vector< std::vector<int> > & N,int modulo,bool & krylov,std::vector<int> & res,GIAC_CONTEXT,bool compute_pmin);
+  bool mod_pcar(const matrice & A,std::vector< std::vector<int> > & N,int modulo,bool & krylov,std::vector<int> & res,GIAC_CONTEXT,bool compute_pmin,std::vector< std::vector<int> > & ttemp);
+  bool mod_pcar(std::vector< std::vector<int> > & N,int modulo,bool & krylov,std::vector<int> & res,GIAC_CONTEXT,bool compute_pmin,std::vector< std::vector<int> > & ttemp);
   vecteur mpcar_hessenberg(const matrice & A,int modulo,GIAC_CONTEXT);
   gen _pcar_hessenberg(const gen & g,GIAC_CONTEXT);
   extern const unary_function_ptr * const  at_pcar_hessenberg ;
@@ -465,9 +493,10 @@ namespace giac {
   int vecteur2gsl_vector(const vecteur & v,gsl_vector * w,GIAC_CONTEXT); // no alloc
   int vecteur2gsl_vector(const_iterateur it,const_iterateur itend,gsl_vector * w,GIAC_CONTEXT);
   vecteur gsl_vector2vecteur(const gsl_vector * v);
+  int matrice2gsl_matrix(const matrice & m,int i0,int j0,int n1,int n2,bool transp,gsl_matrix * w,GIAC_CONTEXT);
   int matrice2gsl_matrix(const matrice & m,gsl_matrix * w,GIAC_CONTEXT);
   gsl_matrix * matrice2gsl_matrix(const matrice & m,GIAC_CONTEXT);
-  matrice gsl_matrix2matrice(const gsl_matrix * v);
+  matrice gsl_matrix2matrice(const gsl_matrix * v,bool transp=false);
   vecteur gsl_permutation2vecteur(const gsl_permutation * p,GIAC_CONTEXT);
 #endif // HAVE_LIBGSL
   
@@ -483,6 +512,35 @@ namespace giac {
 
   gen _cholesky(const gen & a,GIAC_CONTEXT);
   extern const unary_function_ptr * const  at_cholesky ;
+#if defined SDL_KHICAS
+  struct log_output_redirect { // fake
+    log_output_redirect(GIAC_CONTEXT){}
+  };
+#endif
+#if !defined KHICAS && !defined SDL_KHICAS && !defined GIAC_HAS_STO_38
+  // additions by L. Marohnić:
+  struct log_output_redirect { // redirecting log output to string
+    log_output_redirect(GIAC_CONTEXT) { old=logptr(ctx=contextptr)->rdbuf(buffer.rdbuf()); }
+    ~log_output_redirect() { logptr(ctx)->rdbuf(old); }
+    std::string get_buffer_string() const { return buffer.str(); }
+    bool has_warning() const;
+  private:
+    const context *ctx;
+    std::stringstream buffer;
+    std::streambuf *old;
+  };
+#endif
+  // LDL decomposition, inertia computation and solve_indef for fast system solving using the factorization
+  bool ldl(matrice & a,std::vector<int> & perm,int mat_type,bool &sing,double time_limit,GIAC_CONTEXT);
+#if defined(HAVE_LIBLAPACK) && !defined(POCKETCAS)
+  bool solve_indef(double *A,double **WORK,int *IPIV,double *b,int N,int NRHS,int *p,int *n,int *z);
+#endif
+  bool solve_indef(matrice &A,const vecteur *b,vecteur &x,int *p,int *n,int *z,GIAC_CONTEXT);
+  gen _ldl(const gen & a,GIAC_CONTEXT);
+  extern const unary_function_ptr * const  at_ldl ;
+  gen _inertia(const gen & a,GIAC_CONTEXT);
+  extern const unary_function_ptr * const  at_inertia ;
+  // end additions by L. Marohnić
   gen _svd(const gen & a,GIAC_CONTEXT);
   extern const unary_function_ptr * const  at_svd ;
   gen _basis(const gen & a,GIAC_CONTEXT);

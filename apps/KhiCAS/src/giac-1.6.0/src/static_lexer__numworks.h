@@ -521,6 +521,7 @@
  & at_diff,
  & at_dim,
  & at_ls,
+ & at_discriminant,
  & at_display,
  & at_disque,
  & at_disque_centre,

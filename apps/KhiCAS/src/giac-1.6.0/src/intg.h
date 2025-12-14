@@ -26,6 +26,7 @@ namespace giac {
   class gen;
   class identificateur;
   struct unary_function_ptr;
+  bool has_undef(const gen & g);
   void restorepurge(const gen & xval,const gen & x,GIAC_CONTEXT);
   gen assumeeval(const gen & x,GIAC_CONTEXT);
   // auto-assumptions assuming g is real-defined
@@ -130,7 +131,10 @@ namespace giac {
 
   gen preval(const gen & f,const gen & x,const gen & a,const gen & b,GIAC_CONTEXT);
   gen _ibpdv(const gen & args,GIAC_CONTEXT);
-  extern const unary_function_ptr * const  at_ibpdv;  
+  extern const unary_function_ptr * const  at_ibpdv;
+
+  gen _periodic(const gen & g,GIAC_CONTEXT);
+  extern const unary_function_ptr * const  at_periodic;
 
   gen fourier_an(const gen & f,const gen & x,const gen & T,const gen & n,const gen & a,GIAC_CONTEXT);
   gen fourier_bn(const gen & f,const gen & x,const gen & T,const gen & n,const gen & a,GIAC_CONTEXT);

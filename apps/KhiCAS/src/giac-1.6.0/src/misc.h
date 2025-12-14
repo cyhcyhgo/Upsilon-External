@@ -61,13 +61,18 @@ namespace giac {
   gen _degree(const gen & args,GIAC_CONTEXT);
   gen _total_degree(const gen & args,GIAC_CONTEXT);
   gen _lcoeff(const gen & args,GIAC_CONTEXT);
+  extern const unary_function_ptr * const  at_periode ;
+  extern const unary_function_ptr * const  at_caseval ;
   extern const unary_function_ptr * const  at_lcoeff ;
   extern const unary_function_ptr * const  at_set_language ;
   extern const unary_function_ptr * const  at_float ;
   gen _build_complex(const gen & args,GIAC_CONTEXT);
   extern const unary_function_ptr * const  at_complex ;
+  extern const unary_function_ptr * const  at_radians ;
+  extern const unary_function_ptr * const  at_subtype ;
 
   gen _tcoeff(const gen & args,GIAC_CONTEXT);
+  vecteur sqrfree(const gen & g,const vecteur & l,int mult,GIAC_CONTEXT);
   gen _sqrfree(const gen & args,GIAC_CONTEXT);
   gen _truncate(const gen & args,GIAC_CONTEXT);
   gen _canonical_form(const gen & args,GIAC_CONTEXT);
@@ -82,6 +87,7 @@ namespace giac {
   gen _gramschmidt(const gen & g,GIAC_CONTEXT);
   gen _fmod(const gen & g,GIAC_CONTEXT);
   gen _pmin(const gen & g,GIAC_CONTEXT);
+  bool is_potential(const vecteur & fv,const vecteur & xv,gen & res,GIAC_CONTEXT);
   gen _potential(const gen & g,GIAC_CONTEXT);
   gen _vpotential(const gen & g,GIAC_CONTEXT);
   gen _poly2symb(const gen & g,GIAC_CONTEXT);
@@ -177,6 +183,7 @@ namespace giac {
   gen _remove_language(const gen & args,GIAC_CONTEXT);
   gen _show_language(const gen & args,GIAC_CONTEXT);
   gen _os_version(const gen & args,GIAC_CONTEXT);
+  gen _linspace(const gen & args,GIAC_CONTEXT);
 
   extern const unary_function_ptr * const  at_normalize;
   void aplatir(const matrice & m,vecteur & v,bool full=false);
@@ -262,6 +269,7 @@ namespace giac {
 
   bool has_undef_stringerr(const gen & g,std::string & err);
   gen _is_polynomial(const gen & args,GIAC_CONTEXT);
+  bool is_periodic(const gen & f,const gen & x,gen & periode,GIAC_CONTEXT);
 
   // step by step utilities
   // poi=point of interest, tvi=table of variation
@@ -285,6 +293,7 @@ namespace giac {
   extern const unary_function_ptr * const  at_python_list;
   extern const unary_function_ptr * const  at_show;
   extern const unary_function_ptr * const  at_diagrammebatons ;
+  extern const unary_function_ptr * const  at_diagramme_batons ;
   extern const unary_function_ptr * const  at_pop;
   extern const unary_function_ptr * const  at_coth ;
   extern const unary_function_ptr * const  at_atan2 ;
@@ -302,11 +311,21 @@ namespace giac {
   extern const unary_function_ptr * const  at_isinf ;
   extern const unary_function_ptr * const  at_isfinite ;
   extern const unary_function_ptr * const  at_isnan ;
+  extern const unary_function_ptr * const  at_fmod ;
   extern const unary_function_ptr * const  at_draw_string ;
   extern const unary_function_ptr * const  at_draw_filled_circle ;
   extern const unary_function_ptr * const  at_draw_filled_arc ;
+  extern const unary_function_ptr * const  at_draw_circle ;
+  extern const unary_function_ptr * const  at_draw_arc ;
+  extern const unary_function_ptr * const  at_draw_line ;
+  extern const unary_function_ptr * const  at_draw_polygon ;
+  extern const unary_function_ptr * const  at_fill_rect ;
+  extern const unary_function_ptr * const  at_draw_rectangle ;
   extern const unary_function_ptr * const  at_dtype ;
   extern const unary_function_ptr * const  at_rgb ;
+  extern const unary_function_ptr * const  at_hsv ;
+  extern const unary_function_ptr * const  at_hsv2rgb ;
+  extern const unary_function_ptr * const  at_rgb2hsv ;
   extern const unary_function_ptr * const  at_prediction;
   extern const unary_function_ptr * const  at_prediction95;
   extern const unary_function_ptr * const  at_confidence;
@@ -325,9 +344,16 @@ namespace giac {
   int rm(const char * filename);
 #endif
 
-  gen _show_pixels(const gen & args,GIAC_CONTEXT);
-  gen _rgb(const gen & args,GIAC_CONTEXT);
   gen _charpoly(const gen & args,GIAC_CONTEXT);
+  gen _show_pixels(const gen & args,GIAC_CONTEXT);
+  // additions by L.Marohnić
+  gen _rgb(const gen & args,GIAC_CONTEXT);
+  gen _hsv(const gen & args,GIAC_CONTEXT);
+  bool index2rgb(int c,unsigned char &r,unsigned char &g,unsigned char &b);
+  gen rgb2hsv(const vecteur &rgb,GIAC_CONTEXT);
+  gen hsv2rgb(const vecteur &hsv,GIAC_CONTEXT);
+  extern void (*fltk_colormap_rgb_ptr)(int c,unsigned char &r,unsigned char &g,unsigned char &b);
+  // end additions by LM
   extern bool freeze;
   extern "C" void console_freeze();
   extern "C" void sync_screen();

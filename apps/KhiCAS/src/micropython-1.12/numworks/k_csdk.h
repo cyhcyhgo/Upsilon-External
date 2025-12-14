@@ -86,7 +86,7 @@ extern "C" {
   void statuslinemsg(const char * msg);
   void statusline(int mode=0);
 #ifdef NUMWORKS
-  inline bool iskeydown(int key);
+  inline bool iskeydown(int key){ return getkey(key | 0x80000000); }
 #else
   bool iskeydown(int key);
 #endif

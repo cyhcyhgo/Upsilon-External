@@ -24,7 +24,9 @@ using namespace std;
 #include "modpoly.h"
 #include "giacintl.h"
 #include "input_parser.h"
+#ifndef GIAC_HAS_STO_38
 #include "kdisplay.h"
+#endif
 #ifdef FXCG
 extern "C" {
 #include <system.h>
@@ -388,7 +390,8 @@ mpz_class smod(const mpz_class & a,int reduce){
     pcontxn.reserve(256); current.reserve(256); tmp.reserve(256); reste.reserve(256);
     for (;it!=itend;){
       current.clear();
-      current.push_back(it->g);
+      if (!is_zero(it->g))
+	current.push_back(it->g);
       curu=it->u;
       ++it;
       for (;it!=itend;++it){
@@ -396,12 +399,13 @@ mpz_class smod(const mpz_class & a,int reduce){
 	if ( newu < u ){
 	  break;
 	}
-	if (curu>newu+var2)
+	if (curu>newu+var2 && !current.empty())
 	  current.insert(current.end(),(curu-newu)/var2-1,T(0));
-	current.push_back(it->g);
+	if (!is_zero(it->g) || !current.empty())
+	  current.push_back(it->g);
 	curu=newu;
       }
-      if (curu>u)
+      if (curu>u && !current.empty())
 	current.insert(current.end(),(curu-u)/var2,T(0));
 #ifdef TIMEOUT
       control_c();
@@ -418,7 +422,8 @@ mpz_class smod(const mpz_class & a,int reduce){
     u=(p.front().u/var)*var;
     for (;it!=itend;){
       current.clear();
-      current.push_back(it->g);
+      if (!is_zero(it->g))
+	current.push_back(it->g);
       curu=it->u;
       ++it;
       for (;it!=itend;++it){
@@ -426,12 +431,13 @@ mpz_class smod(const mpz_class & a,int reduce){
 	if ( newu < u ){
 	  break;
 	}
-	if (curu>newu+var2)
+	if (curu>newu+var2 && !current.empty())
 	  current.insert(current.end(),(curu-newu)/var2-1,T(0));
-	current.push_back(it->g);
+	if (!is_zero(it->g) || !current.empty())
+	  current.push_back(it->g);
 	curu=newu;
       }
-      if (curu>u)
+      if (curu>u && !current.empty())
 	current.insert(current.end(),(curu-u)/var2,T(0));
 #ifdef TIMEOUT
       control_c();
@@ -2587,6 +2593,8 @@ mpz_class smod(const mpz_class & a,int reduce){
       swap(p_ptr,q_ptr);
       swap(pcont,qcont);
       swap(pcofactor,qcofactor);
+      swap(pcofcontxn,qcofcontxn);
+      swap(pcontxn,qcontxn);
       swap(pxndeg,qxndeg);
       swap(pv,qv);
       swap(dim2pcofactorv,dim2qcofactorv);
@@ -2969,7 +2977,10 @@ mpz_class smod(const mpz_class & a,int reduce){
 	      smallmult(d,dcont,d,modulo,0);
 	    if (compute_pcofactor){
 	      smallmult(dp,pcofactor,pcofactor,modulo,0);
-	      smallmult(smod(longlong(p_orig.front().g)*invmod(pcofactor.front().g,modulo),modulo),pcofactor,pcofactor,modulo);
+        if (pcofactor.empty())
+          CERR << "threaded.cc: pcofactor empty\n";
+        else
+          smallmult(smod(longlong(p_orig.front().g)*invmod(pcofactor.front().g,modulo),modulo),pcofactor,pcofactor,modulo);
 	    }
 	    if (compute_qcofactor){
 	      if (dim2)
@@ -2978,7 +2989,10 @@ mpz_class smod(const mpz_class & a,int reduce){
 		interpolate(alphav,qcofactorv,dq,var2,modulo,tmp1interp,tmp2interp);
 	      pp_mod_last(dq,0,modulo,varxn,var2,tmpcont);
 	      smallmult(dq,qcofactor,qcofactor,modulo,0);
-	      smallmult(smod(longlong(q_orig.front().g)*invmod(qcofactor.front().g,modulo),modulo),qcofactor,qcofactor,modulo);
+        if (qcofactor.empty())
+          CERR << "threaded.cc: qcofactor empty\n";
+        else
+          smallmult(smod(longlong(q_orig.front().g)*invmod(qcofactor.front().g,modulo),modulo),qcofactor,qcofactor,modulo);
 	    }
 	    if (debug_infolevel>20-dim)
 	      CERR << "gcdmod end dim " << dim << " " << CLOCK() << '\n';
@@ -3039,7 +3053,7 @@ mpz_class smod(const mpz_class & a,int reduce){
 	}
       } // end for (int thread=0;thread<nthreads;++thread)
 #if 1
-      gcd_call_param<int> * gcd_call_param_v=(gcd_call_param<int> *)alloca(nthreads*sizeof(gcd_call_param<int>));
+      ALLOCA(gcd_call_param<int>,gcd_call_param_v,nthreads*sizeof(gcd_call_param<int>)); // gcd_call_param<int> * gcd_call_param_v=(gcd_call_param<int> *)alloca(nthreads*sizeof(gcd_call_param<int>));
       for (int i=0;i<nthreads;++i)
 	gcd_call_param_v[i]=gcd_par;
 #else
@@ -5402,6 +5416,8 @@ mpz_class smod(const mpz_class & a,int reduce){
       swap(pcont,qcont);
       swap(pcofactor,qcofactor);
       swap(pxndeg,qxndeg);
+      swap(pcofcontxn,qcofcontxn);
+      swap(pcontxn,qcontxn);
       // swap(pv,qv);
 #ifdef BESTA_OS
       bool tmpbool=compute_pcofactor;
